@@ -90,46 +90,17 @@ type SubmittedApplication={
   interviewMethod?:string;interviewLocation?:string
 };
 
-const demoApplicants: User[] = [
-  { name: "Sofia Ramirez", email: "sofia.ramirez@email.com", role: "Applicant" },
-  { name: "Daniel Cruz", email: "daniel.cruz@email.com", role: "Applicant" },
-  { name: "Mikaela Santos", email: "mikaela.santos@email.com", role: "Applicant" },
-  { name: "Nathan Reyes", email: "nathan.reyes@email.com", role: "Applicant" },
-  { name: "Alyssa Mendoza", email: "alyssa.mendoza@email.com", role: "Applicant" },
-  { name: "Gabriel Torres", email: "gabriel.torres@email.com", role: "Applicant" },
-  { name: "Bianca Flores", email: "bianca.flores@email.com", role: "Applicant" },
-  { name: "Lucas Villanueva", email: "lucas.villanueva@email.com", role: "Applicant" }
-];
+const applications: Application[] = [];
+const jobs: Array<{role:string;office:string;type:string;score:number;skills:string[];accent:string}> = [];
+const candidates: Array<{name:string;role:string;score:number;status:string;initials:string}> = [];
 
-const demoApplications: SubmittedApplication[] = [
-  { id: 1101, name: "Sofia Ramirez", email: "sofia.ramirez@email.com", job: "IT Support Specialist", office: "Information Technology", score: 96, skillScore: 98, qualificationScore: 94, skills: ["Technical Support", "Networking", "Active Directory", "Troubleshooting"], status: "AI shortlisted", reviewed: true, resumeName: "Sofia_Ramirez_Resume.pdf", resumeType: "application/pdf", summary: "Strong technical support candidate with hands-on network administration experience and excellent alignment with the school’s IT service requirements.", education: ["BS Information Technology"], experience: ["3 years IT support experience"], qualifications: ["CompTIA A+", "Active Directory administration"], missingSkills: ["Microsoft Intune"], interviewSuggestions: ["Describe a difficult campus network issue you resolved."] },
-  { id: 1102, name: "Daniel Cruz", email: "daniel.cruz@email.com", job: "IT Support Specialist", office: "Information Technology", score: 89, skillScore: 91, qualificationScore: 87, skills: ["Help Desk", "Hardware", "Windows Server", "Networking"], status: "Interview scheduled", reviewed: true, resumeName: "Daniel_Cruz_CV.docx", resumeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", summary: "Well-rounded help desk professional with strong hardware diagnostics and Windows support experience.", interviewDate: "2026-08-04", interviewTime: "10:30", interviewMethod: "Google Meet", interviewLocation: "https://meet.google.com/careerbridge-it" },
-  { id: 1103, name: "Mikaela Santos", email: "mikaela.santos@email.com", job: "Academic Coordinator", office: "Academic Office", score: 94, skillScore: 93, qualificationScore: 96, skills: ["Curriculum Planning", "LMS", "Faculty Coordination", "Research"], status: "Priority", reviewed: true, resumeName: "Mikaela_Santos_Resume.pdf", resumeType: "application/pdf", summary: "Highly qualified academic coordinator with curriculum planning, faculty support, and learning management system expertise." },
-  { id: 1104, name: "Nathan Reyes", email: "nathan.reyes@email.com", job: "Academic Coordinator", office: "Academic Office", score: 86, skillScore: 88, qualificationScore: 84, skills: ["Academic Administration", "Student Records", "Google Workspace", "Reporting"], status: "Under review", reviewed: false, resumeName: "Nathan_Reyes_Resume.pdf", resumeType: "application/pdf", summary: "Organized academic administrator with reliable reporting, records management, and stakeholder coordination skills." },
-  { id: 1105, name: "Alyssa Mendoza", email: "alyssa.mendoza@email.com", job: "Junior Accountant", office: "Accounting Office", score: 92, skillScore: 94, qualificationScore: 90, skills: ["QuickBooks", "Reconciliation", "Financial Reporting", "Excel"], status: "Interview scheduled", reviewed: true, resumeName: "Alyssa_Mendoza_CV.pdf", resumeType: "application/pdf", summary: "Detail-oriented accounting candidate with excellent reconciliation, spreadsheet, and monthly reporting experience.", interviewDate: "2026-08-06", interviewTime: "14:00", interviewMethod: "Onsite", interviewLocation: "Administration Building, Conference Room 2" },
-  { id: 1106, name: "Gabriel Torres", email: "gabriel.torres@email.com", job: "Junior Accountant", office: "Accounting Office", score: 83, skillScore: 85, qualificationScore: 82, skills: ["Bookkeeping", "Accounts Payable", "Excel", "Payroll"], status: "Under review", reviewed: false, resumeName: "Gabriel_Torres_Resume.docx", resumeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", summary: "Promising junior accounting applicant with practical bookkeeping and accounts payable experience." },
-  { id: 1107, name: "Bianca Flores", email: "bianca.flores@email.com", job: "HR Recruitment Assistant", office: "Human Resources", score: 91, skillScore: 92, qualificationScore: 89, skills: ["Recruitment", "Applicant Tracking", "Interview Coordination", "Communication"], status: "AI shortlisted", reviewed: true, resumeName: "Bianca_Flores_Resume.pdf", resumeType: "application/pdf", summary: "Strong recruitment assistant candidate experienced in candidate screening, interview scheduling, and applicant communication." },
-  { id: 1108, name: "Lucas Villanueva", email: "lucas.villanueva@email.com", job: "HR Recruitment Assistant", office: "Human Resources", score: 81, skillScore: 84, qualificationScore: 79, skills: ["Human Resources", "Onboarding", "Documentation", "Microsoft Office"], status: "Under review", reviewed: false, resumeName: "Lucas_Villanueva_CV.pdf", resumeType: "application/pdf", summary: "Entry-level HR applicant with dependable onboarding, documentation, and administrative support experience." }
-];
-
-const applications: Application[] = [
-  { role: "IT Support Specialist", office: "Information Technology", status: "Interview", score: 92, date: "Jul 22, 2026", color: "#6d70ea" },
-  { role: "Administrative Assistant", office: "Human Resources", status: "Under review", score: 84, date: "Jul 18, 2026", color: "#ee90af" },
-  { role: "Junior Accountant", office: "Accounting Office", status: "Submitted", score: 76, date: "Jul 14, 2026", color: "#56b9aa" }
-];
-
-const jobs = [
-  { role: "IT Support Specialist", office: "IT Office", type: "Full-time", score: 92, skills: ["Hardware", "Networking", "Help desk"], accent: "#6b70e8" },
-  { role: "Systems Administrator", office: "IT Office", type: "Full-time", score: 88, skills: ["Linux", "Security", "Cloud"], accent: "#a67ae8" },
-  { role: "Academic Coordinator", office: "Academic Office", type: "Full-time", score: 81, skills: ["Planning", "LMS", "Research"], accent: "#e485a8" }
-];
-
-const candidates = [
-  { name: "Maria Santos", role: "IT Support Specialist", score: 94, status: "Recommended", initials: "MS" },
-  { name: "John Reyes", role: "Systems Administrator", score: 89, status: "Review", initials: "JR" },
-  { name: "Angela Cruz", role: "IT Support Specialist", score: 86, status: "Interview", initials: "AC" },
-  { name: "Paolo Garcia", role: "Web Developer", score: 82, status: "Review", initials: "PG" }
-];
+function downloadExcel(filename:string,headers:string[],rows:Array<Array<string|number>>) {
+  const escape=(value:string|number)=>String(value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+  const table=`<table><thead><tr>${headers.map(header=>`<th>${escape(header)}</th>`).join("")}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(value=>`<td>${escape(value)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  const workbook=`<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial}th{background:#246fdf;color:#fff}th,td{border:1px solid #cfd8e6;padding:8px}</style></head><body>${table}</body></html>`;
+  const url=URL.createObjectURL(new Blob([workbook],{type:"application/vnd.ms-excel;charset=utf-8"}));
+  const link=document.createElement("a");link.href=url;link.download=filename.endsWith(".xls")?filename:`${filename}.xls`;link.click();URL.revokeObjectURL(url);
+}
 
 function ScoreRing({ score, small = false }: { score: number; small?: boolean }) {
   return (
@@ -161,7 +132,7 @@ function ResumeDocument({ application }: { application: SubmittedApplication }) 
 }
 
 function Brand() {
-  return <div className="brand"><div className="brand-mark brand-logo-image"><Image src={logoResume} alt="CareerBridge Ai logo"/></div><span>CareerBridge Ai</span></div>;
+  return <div className="brand"><div className="brand-mark brand-logo-image"><Image src={logoResume} alt="CareerBridge AI logo"/></div><span>CareerBridge AI</span></div>;
 }
 
 function Sidebar({ role, page, setPage, open, close, onLogout, user, messageCount }: { role: Role; page: string; setPage: (p: string) => void; open: boolean; close: () => void; onLogout: () => void; user:User;messageCount:number }) {
@@ -351,21 +322,18 @@ function AdminLiveHome({jobs,applications,applicants,setPage}:{jobs:JobRecord[];
   const average=applications.length?Math.round(applications.reduce((sum,item)=>sum+item.score,0)/applications.length):0;
   const shortlisted=applications.filter(item=>item.status==="AI shortlisted"||item.status==="Priority").length;
   const pending=Math.max(0,applications.length-reviewed);
-  const chartData={
-    "7":[3,5,4,7,6,8,5],
-    "30":[14,19,16,25,22,29,24],
-    "90":[38,52,47,69,63,78,71]
-  }[chartRange];
-  const chartMaximum=chartRange==="7"?8:chartRange==="30"?30:80;
+  const chartData=applications.reduce((counts,item)=>{counts[Math.abs(item.id)%7]+=1;return counts},[0,0,0,0,0,0,0]);
+  const chartMaximum=Math.max(1,...chartData);
   const rankedApplications=applications.slice().sort((a,b)=>ranking==="score"?b.score-a.score:ranking==="latest"?b.id-a.id:Number(a.reviewed)-Number(b.reviewed));
   const kpis: Array<[typeof UsersRound,string,string,string,string]> = [
-    [UsersRound,"Total applicants",String(applicants.length),"+18%","Applicant accounts"],
-    [BriefcaseBusiness,"Open positions",String(openJobs.length),"+12%","Active opportunities"],
-    [CheckCircle2,"Review progress",`${applications.length?Math.round(reviewed/applications.length*100):0}%`,"+24%","Applications reviewed"],
-    [BrainCircuit,"Average AI match",`${average}%`,"+6%","Across active roles"]
+    [UsersRound,"Total applicants",String(applicants.length),"Live","Applicant accounts"],
+    [BriefcaseBusiness,"Open positions",String(openJobs.length),"Live","Active opportunities"],
+    [CheckCircle2,"Review progress",`${applications.length?Math.round(reviewed/applications.length*100):0}%`,"Live","Applications reviewed"],
+    [BrainCircuit,"Average AI match",`${average}%`,"Live","Across active roles"]
   ];
+  const exportInsights=()=>downloadExcel("careerbridge-ai-insights.xls",["Applicant","Email","Position","Office","AI Match","Skill Score","Status"],applications.map(item=>[item.name,item.email,item.job,item.office,`${item.score}%`,`${item.skillScore??item.score}%`,item.status]));
   return <div className="page-content overview-dashboard">
-    <div className="overview-title"><div><h1>Dashboard Overview</h1><p>Recruitment activity and AI performance across all school positions.</p></div><button className="overview-export" onClick={()=>setPage("AI insights")}><Download size={17}/> Export insights</button></div>
+    <div className="overview-title"><div><h1>Dashboard Overview</h1><p>Recruitment activity and AI performance across all school positions.</p></div><button className="overview-export" onClick={exportInsights}><Download size={17}/> Export insights</button></div>
     <div className="overview-kpis">
       {kpis.map(([Icon,label,value,trend,note])=><article className="card overview-kpi" key={label}><div className="overview-kpi-head"><span><Icon size={18}/>{label}</span><MoreHorizontal size={17}/></div><div><strong>{value}</strong><b><TrendingUp size={13}/>{trend}</b></div><small>{note}</small></article>)}
     </div>
@@ -373,7 +341,7 @@ function AdminLiveHome({jobs,applications,applicants,setPage}:{jobs:JobRecord[];
       <section className="card recruitment-chart">
         <div className="overview-panel-head"><div><h2>Application Summary</h2><p>Applicant and review performance</p></div><label className="overview-select"><select value={chartRange} onChange={event=>setChartRange(event.target.value as "7"|"30"|"90")}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select><ChevronDown size={14}/></label></div>
         <div className="chart-legend"><span><i/>Applications</span><span><i/>Reviewed</span></div>
-        <div className="bar-chart"><div className="chart-axis"><span>{chartMaximum}</span><span>{Math.round(chartMaximum*.75)}</span><span>{Math.round(chartMaximum*.5)}</span><span>{Math.round(chartMaximum*.25)}</span><span>0</span></div>{chartData.map((value,index)=><div className="bar-day" key={index}><div className="bar-pair"><i style={{height:`${value/chartMaximum*100}%`}}/><i style={{height:`${Math.max(1,value-(index%3+1)*(chartRange==="7"?1:3))/chartMaximum*100}%`}}/></div><span>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index]}</span></div>)}</div>
+        <div className="bar-chart"><div className="chart-axis"><span>{chartMaximum}</span><span>{Math.round(chartMaximum*.75)}</span><span>{Math.round(chartMaximum*.5)}</span><span>{Math.round(chartMaximum*.25)}</span><span>0</span></div>{chartData.map((value,index)=><div className="bar-day" key={index}><div className="bar-pair"><i style={{height:`${value/chartMaximum*100}%`}}/><i style={{height:`${applications.filter(item=>Math.abs(item.id)%7===index&&item.reviewed).length/chartMaximum*100}%`}}/></div><span>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index]}</span></div>)}</div>
       </section>
       <section className="card status-chart">
         <div className="overview-panel-head"><div><h2>Application Status</h2><p>Current hiring pipeline</p></div><MoreHorizontal size={18}/></div>
@@ -382,9 +350,10 @@ function AdminLiveHome({jobs,applications,applicants,setPage}:{jobs:JobRecord[];
       </section>
     </div>
     <section className="card overview-table">
-      <div className="overview-panel-head"><div><h2>Applicant Performance</h2><p>Candidates ranked by CareerBridge Ai</p></div><div className="overview-table-actions"><label className="overview-select"><select value={ranking} onChange={event=>setRanking(event.target.value as "score"|"latest"|"review")}><option value="score">Top matches</option><option value="latest">Latest applicants</option><option value="review">Needs review</option></select><ChevronDown size={14}/></label><button onClick={()=>setPage("Candidates")}>View all <ChevronRight size={14}/></button></div></div>
+      <div className="overview-panel-head"><div><h2>Applicant Performance</h2><p>Candidates ranked by CareerBridge AI</p></div><div className="overview-table-actions"><label className="overview-select"><select value={ranking} onChange={event=>setRanking(event.target.value as "score"|"latest"|"review")}><option value="score">Top matches</option><option value="latest">Latest applicants</option><option value="review">Needs review</option></select><ChevronDown size={14}/></label><button onClick={()=>setPage("Candidates")}>View all <ChevronRight size={14}/></button></div></div>
       <div className="overview-table-head"><span>Applicant</span><span>Position</span><span>AI match</span><span>Review status</span><span>Recommendation</span></div>
       {rankedApplications.slice(0,5).map(item=><div className="overview-table-row" key={item.id}><div><div className="avatar">{item.applicantAvatar?<img src={item.applicantAvatar} alt={item.name}/>:item.name.split(" ").map(x=>x[0]).join("").slice(0,2)}</div><span><b>{item.name}</b><small>{item.email}</small></span></div><span><b>{item.job}</b><small>{item.office}</small></span><strong>{item.score}%</strong><span className={`status ${item.reviewed?"reviewed":"under-review"}`}>{item.reviewed?"Reviewed":"In review"}</span><em className={item.score>=90?"top-match":"good-match"}>{item.score>=90?"Top match":"Good match"}</em></div>)}
+      {!rankedApplications.length&&<div className="overview-empty"><UsersRound size={24}/><b>No applicant data yet</b><span>New accounts and analyzed resumes will appear here.</span></div>}
     </section>
   </div>
 }
@@ -518,7 +487,7 @@ function AIInsightsPage({ notify,priorityNames,setPriorityNames }: { notify:(s:s
   const [range,setRange]=useState("30 days"); const [running,setRunning]=useState(false); const [explain,setExplain]=useState<typeof candidates[0]|null>(null); const [recommendation,setRecommendation]=useState<[string,string,string]|null>(null);
   const recommendations:[string,string,string][]=[["Prioritize 12 IT candidates","Applicants exceed the 90% match threshold.","High"],["Expand Academic search","Learning-management skills are scarce.","Medium"],["Review Accounting criteria","A requirement may be limiting diversity.","Review"]];
   const run=async()=>{setRunning(true);try{await fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({resumeText:"Analyze the current school recruitment talent pool with IT, academic, accounting, and HR applicants.",jobDescription:"Identify qualification trends, missing skills, recommendations, and interview priorities."})});notify("AI analysis refreshed with current applicant data")}catch{notify("Current insights retained; AI service is temporarily unavailable")}finally{setRunning(false)}};
-  const exportInsights=()=>{const csv=["Candidate,Position,Match Score,Top Factors",...candidates.map((c,i)=>`"${c.name}","${c.role}",${c.score},"Skills +${32-i}; Experience +${28-i}; Education +18"`)].join("\n");const url=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));const a=document.createElement("a");a.href=url;a.download="careerbridge-ai-insights.csv";a.click();URL.revokeObjectURL(url);notify("AI insights report exported")};
+  const exportInsights=()=>{downloadExcel("careerbridge-ai-insights.xls",["Candidate","Position","Match Score","Top Factors"],candidates.map((c,i)=>[c.name,c.role,`${c.score}%`,`Skills +${32-i}; Experience +${28-i}; Education +18`]));notify("AI insights Excel report exported")};
   return <div className="page-content" onClick={e=>{const button=(e.target as HTMLElement).closest("button");if(button?.textContent?.includes("Add to priority review")&&explain&&!priorityNames.includes(explain.name)){setPriorityNames([...priorityNames,explain.name])}}}><div className="page-heading"><div><div className="eyebrow"><WandSparkles size={14}/> Live recruitment intelligence</div><h1>AI insights</h1><p>Explainable recommendations generated from applicant qualifications and job requirements.</p></div><button className="primary" onClick={run}><Sparkles size={16}/>{running?"Analyzing…":"Run live analysis"}</button></div>
     <div className="insight-kpis"><Metric label="Profiles analyzed" value="1,284" note="100% processed" icon={FileSearch} tint="#eef0ff"/><Metric label="Strong matches" value="326" note="+18 this week" icon={Sparkles} tint="#fff0f5"/><Metric label="Skills gaps found" value="74" note="Across 12 roles" icon={Zap} tint="#fff6e7"/><Metric label="Bias checks" value="100%" note="No flags detected" icon={CheckCircle2} tint="#ecfaf7"/></div>
     <div className="ai-dashboard-grid"><section className="card panel"><div className="panel-title"><div><h2>Qualification intelligence</h2><p>Most influential skills across current openings</p></div><select value={range} onChange={e=>setRange(e.target.value)}><option>7 days</option><option>30 days</option><option>90 days</option></select></div>{[["Technical support",92,186],["Microsoft 365",86,154],["Learning systems",78,129],["Data analysis",72,98],["Financial reporting",64,73]].map(([skill,n,count])=><div className="skill-insight" key={skill}><div><b>{skill}</b><span>{count} applicants</span></div><div><i style={{width:`${n}%`}}/></div><strong>{n}%</strong></div>)}</section>
@@ -536,7 +505,7 @@ function LiveAIInsightsPage({items,notify,priorityNames,setPriorityNames}:{items
   const skillCounts=new Map<string,number>();items.forEach(item=>item.skills?.forEach(skill=>skillCounts.set(skill,(skillCounts.get(skill)||0)+1)));
   const topSkills=[...skillCounts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
   const run=async()=>{if(!items.length){notify("Upload applicant resumes before running AI insights.");return}setRunning(true);try{const response=await fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({resumeText:items.map(item=>item.extractedText).filter(Boolean).join("\n\n"),jobDescription:items.map(item=>`${item.job}: ${item.score}% match`).join("\n")})});if(!response.ok)throw new Error();notify("AI insights refreshed from current applications.")}catch{notify("Unable to refresh AI insights.")}finally{setRunning(false)}};
-  const exportReport=()=>{if(!items.length){notify("There is no applicant data to export.");return}const csv=["Applicant,Email,Job,Overall Score,Skill Score,Status",...ranked.map(item=>`"${item.name}","${item.email}","${item.job}",${item.score},${item.skillScore??item.score},"${item.status}"`)].join("\n");const url=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));const link=document.createElement("a");link.href=url;link.download="careerbridge-ai-insights.csv";link.click();URL.revokeObjectURL(url)};
+  const exportReport=()=>{if(!items.length){notify("There is no applicant data to export.");return}downloadExcel("careerbridge-ai-insights.xls",["Applicant","Email","Job","Overall Score","Skill Score","Status"],ranked.map(item=>[item.name,item.email,item.job,`${item.score}%`,`${item.skillScore??item.score}%`,item.status]));notify("AI insights Excel report exported")};
   return <div className="page-content"><div className="page-heading"><div><div className="eyebrow"><WandSparkles size={14}/> Applicant intelligence</div><h1>AI insights</h1><p>Calculated only from resumes uploaded during this test.</p></div><button className="primary" onClick={run} disabled={running}><Sparkles size={16}/>{running?"Analyzing…":"Run live analysis"}</button></div>
     <div className="insight-kpis"><Metric label="Profiles analyzed" value={String(items.length)} note="Actual applications" icon={FileSearch} tint="#eef4ff"/><Metric label="Strong matches" value={String(strong.length)} note="80% and above" icon={CheckCircle2} tint="#eef4ff"/><Metric label="Unique skills" value={String(skillCounts.size)} note="Extracted from resumes" icon={Zap} tint="#eef4ff"/><Metric label="Priority review" value={String(priorityNames.length)} note="Selected by Admin" icon={ShieldCheck} tint="#eef4ff"/></div>
     {!items.length?<section className="card panel empty-ai-state"><BrainCircuit/><h2>No AI insight data yet</h2><p>Create a job posting, register an applicant, and upload a resume. Real Groq scores and extracted skills will appear here.</p></section>:<><div className="ai-dashboard-grid"><section className="card panel"><div className="panel-title"><div><h2>Extracted skill frequency</h2><p>Based on current uploaded resumes</p></div></div>{topSkills.map(([skill,count])=><div className="skill-insight" key={skill}><div><b>{skill}</b><span>{count} applicant{count===1?"":"s"}</span></div><div><i style={{width:`${Math.round(count/items.length*100)}%`}}/></div><strong>{Math.round(count/items.length*100)}%</strong></div>)}</section><section className="card panel"><div className="panel-title"><div><h2>Current recruitment data</h2><p>No generated sample recommendations</p></div><button className="text-button" onClick={exportReport}><Download size={14}/> Export</button></div><div className="live-data-summary"><span><b>{items.length}</b> Applications</span><span><b>{new Set(items.map(item=>item.job)).size}</b> Matched jobs</span><span><b>{items.filter(item=>item.reviewed).length}</b> Reviewed</span></div></section></div><section className="card panel explain-table"><div className="panel-title"><div><h2>AI-ranked applicants</h2><p>Scores returned from each applicant’s real resume analysis</p></div></div>{ranked.map(item=><div className="explain-row" key={item.id}><div className="avatar">{item.applicantAvatar?<img src={item.applicantAvatar} alt={item.name}/>:item.name.split(" ").map(x=>x[0]).join("").slice(0,2)}</div><div><b>{item.name}</b><span>{item.job}</span></div><ScoreRing score={item.score} small/><div className="factor"><span>Measured factors</span><div><i>Skills {item.skillScore??item.score}%</i><i>Qualifications {item.qualificationScore??item.score}%</i></div></div><button className="secondary" onClick={()=>setSelected(item)}>Explain score</button></div>)}</section></>}
@@ -554,13 +523,7 @@ function WorkflowPage({ notify }: { notify:(s:string)=>void }) {
 }
 
 type JobRecord={id:number;title:string;office:string;type:string;location:string;description:string;requirements:string;status:"Open"|"Closed";applicants:number;match:number};
-const initialJobRecords:JobRecord[]=[
-  { id: 201, title: "IT Support Specialist", office: "Information Technology", type: "Full-time", location: "Main Campus", description: "Support campus devices, networks, user accounts, and classroom technology.", requirements: "BS Information Technology or related degree; networking, troubleshooting, Active Directory, and help desk experience.", status: "Open", applicants: 2, match: 96 },
-  { id: 202, title: "Academic Coordinator", office: "Academic Office", type: "Full-time", location: "Academic Building", description: "Coordinate academic programs, faculty requirements, schedules, and curriculum documentation.", requirements: "Education-related degree; curriculum planning, LMS, research, reporting, and faculty coordination.", status: "Open", applicants: 2, match: 94 },
-  { id: 203, title: "Junior Accountant", office: "Accounting Office", type: "Full-time", location: "Administration Building", description: "Assist with reconciliations, financial reports, payables, and school accounting records.", requirements: "Accounting degree; Excel, bookkeeping, reconciliation, financial reporting, and accounting software.", status: "Open", applicants: 2, match: 92 },
-  { id: 204, title: "HR Recruitment Assistant", office: "Human Resources", type: "Full-time", location: "Administration Building", description: "Support candidate screening, interview coordination, onboarding, and recruitment records.", requirements: "Human Resources or business degree; recruitment, communication, applicant tracking, and documentation skills.", status: "Open", applicants: 2, match: 91 },
-  { id: 205, title: "School Records Assistant", office: "Academic Office", type: "Part-time", location: "Registrar Office", description: "Maintain accurate student files and assist with records requests.", requirements: "Records management, data privacy, Microsoft Office, and strong attention to detail.", status: "Closed", applicants: 0, match: 0 }
-];
+const initialJobRecords:JobRecord[]=[];
 
 function JobPostingsPage({ role,notify,records,setRecords,setSubmitted,user }:{role:Role;notify:(s:string)=>void;records:JobRecord[];setRecords:React.Dispatch<React.SetStateAction<JobRecord[]>>;setSubmitted:React.Dispatch<React.SetStateAction<SubmittedApplication[]>>;user:User}) {
   const [editing,setEditing]=useState<JobRecord|null>(null); const [applying,setApplying]=useState<JobRecord|null>(null); const [matching,setMatching]=useState(false); const [q,setQ]=useState(""); const [status,setStatus]=useState<"All"|"Open"|"Closed">("All");
@@ -668,10 +631,10 @@ export default function Home() {
   const [toast,setToast]=useState("");
   const [jobRecords,setJobRecords]=useState<JobRecord[]>(initialJobRecords);
   const [priorityNames,setPriorityNames]=useState<string[]>([]);
-  const [registeredApplicants,setRegisteredApplicants]=useState<User[]>(demoApplicants);
-  const [submitted,setSubmitted]=useState<SubmittedApplication[]>(demoApplications);
+  const [registeredApplicants,setRegisteredApplicants]=useState<User[]>([]);
+  const [submitted,setSubmitted]=useState<SubmittedApplication[]>([]);
   const [messages,setMessages]=useState<SharedMessage[]>([]);
-  useEffect(()=>{const savedApplicants=JSON.parse(localStorage.getItem("careerbridge_applicants")||"[]") as User[];setRegisteredApplicants([...new Map([...demoApplicants,...savedApplicants].map(x=>[x.email.toLowerCase(),x])).values()]);fetch("/api/auth/session").then(r=>r.ok?r.json():null).then(d=>{if(d?.user){const u=d.user.role==="Office"?{...d.user,role:"Administrator" as Role}:d.user;setUser(u);setRole(u.role)}else{const saved=localStorage.getItem("careerbridge_signup_user");if(saved){const u=JSON.parse(saved) as User;setUser(u);setRole(u.role)}}}).finally(()=>setChecking(false))},[]);
+  useEffect(()=>{const savedApplicants=JSON.parse(localStorage.getItem("careerbridge_applicants")||"[]") as User[];setRegisteredApplicants(savedApplicants);fetch("/api/auth/session").then(r=>r.ok?r.json():null).then(d=>{if(d?.user){const u=d.user.role==="Office"?{...d.user,role:"Administrator" as Role}:d.user;setUser(u);setRole(u.role)}else{const saved=localStorage.getItem("careerbridge_signup_user");if(saved){const u=JSON.parse(saved) as User;setUser(u);setRole(u.role)}}}).finally(()=>setChecking(false))},[]);
   const notify=(s:string)=>{setToast(s);setTimeout(()=>setToast(""),2600)};
   const logout=async()=>{await fetch("/api/auth/logout",{method:"POST"});localStorage.removeItem("careerbridge_signup_user");setUser(null);setShowLogin(false);setPage("Overview")};
   const content = useMemo(() => {

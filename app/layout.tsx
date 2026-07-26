@@ -11,7 +11,7 @@ import "./hugeicons-font.css";
 import "./overview-dashboard.css";
 
 export const metadata: Metadata = {
-  title: "CareerBridge Ai",
+  title: "CareerBridge AI",
   description: "AI-powered resume analysis and applicant management for schools.",
   icons: {
     icon: "/branding/careerbridge-logo.png",
