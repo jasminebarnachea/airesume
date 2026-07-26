@@ -1,13 +1,14 @@
-/* Keep animated objects above opaque section backgrounds and below content. */
-.landing-page .landing-3d-scene{z-index:4;pointer-events:none}
-.landing-page .landing-bubbles{z-index:3}
-.landing-page .landing-main{z-index:1}
+/* Decorative motion stays in the background; every content surface paints above it. */
+.landing-page{position:relative;isolation:isolate}
+.landing-page .landing-3d-scene{z-index:0;pointer-events:none}
+.landing-page .landing-bubbles{z-index:0;pointer-events:none}
+.landing-page .landing-main{position:relative;z-index:2}
 .landing-page .landing-nav{z-index:100}
 .landing-page .landing-hero,
 .landing-page .landing-features,
 .landing-page .landing-showcase,
 .landing-page .landing-cta,
-.landing-page .landing-footer{position:relative}
+.landing-page .landing-footer{position:relative;z-index:2}
 .landing-page .landing-copy,
 .landing-page .landing-dashboard-frame,
 .landing-page .landing-section-title,
@@ -20,7 +21,7 @@
 .landing-page .landing-trust,
 .landing-page .landing-contact,
 .landing-page .landing-cta>*,
-.landing-page .landing-footer>*{position:relative;z-index:6}
+.landing-page .landing-footer>*{position:relative;z-index:3}
 .landing-page .landing-dashboard-frame,
 .landing-page .feature-grid article,
 .landing-page .showcase-phone,
