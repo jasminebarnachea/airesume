@@ -13,25 +13,28 @@ async function extractScannedPdfText(buffer: Buffer) {
     Path2D: canvas.Path2D,
   });
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const { recognize } = await import("tesseract.js");
+  const { createWorker } = await import("tesseract.js");
   const pdf = await pdfjs.getDocument({
     data: new Uint8Array(buffer),
     useSystemFonts: true,
   }).promise;
   const pages: string[] = [];
+  const worker = await createWorker("eng", 1, { logger: () => undefined });
   // Resumes are normally short. This ceiling prevents one upload monopolizing the server.
   const pageCount = Math.min(pdf.numPages, 8);
-  for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-    const page = await pdf.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: 2 });
-    const image = canvas.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-    const context = image.getContext("2d");
-    await page.render({ canvasContext: context as never, viewport }).promise;
-    const result = await recognize(image.toBuffer("image/png"), "eng", {
-      logger: () => undefined,
-    });
-    if (result.data.text.trim()) pages.push(result.data.text);
-    page.cleanup();
+  try {
+    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 2 });
+      const image = canvas.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      const context = image.getContext("2d");
+      await page.render({ canvasContext: context as never, viewport }).promise;
+      const result = await worker.recognize(image.toBuffer("image/png"));
+      if (result.data.text.trim()) pages.push(result.data.text);
+      page.cleanup();
+    }
+  } finally {
+    await worker.terminate();
   }
   await pdf.destroy();
   return pages.join("\n\n");

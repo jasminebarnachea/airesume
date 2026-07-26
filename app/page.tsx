@@ -651,11 +651,18 @@ export default function Home() {
   const [menu, setMenu] = useState(false);
   const [toast,setToast]=useState("");
   const [jobRecords,setJobRecords]=useState<JobRecord[]>(initialJobRecords);
+  const [recordsReady,setRecordsReady]=useState(false);
   const [priorityNames,setPriorityNames]=useState<string[]>([]);
   const [registeredApplicants,setRegisteredApplicants]=useState<User[]>([]);
   const [submitted,setSubmitted]=useState<SubmittedApplication[]>([]);
   const [messages,setMessages]=useState<SharedMessage[]>([]);
-  useEffect(()=>{const savedApplicants=JSON.parse(localStorage.getItem("careerbridge_applicants")||"[]") as User[];setRegisteredApplicants(savedApplicants);fetch("/api/auth/session").then(r=>r.ok?r.json():null).then(d=>{if(d?.user){const u=d.user.role==="Office"?{...d.user,role:"Administrator" as Role}:d.user;setUser(u);setRole(u.role)}else{const saved=localStorage.getItem("careerbridge_signup_user");if(saved){const u=JSON.parse(saved) as User;setUser(u);setRole(u.role)}}}).finally(()=>setChecking(false))},[]);
+  useEffect(()=>{
+    const savedApplicants=JSON.parse(localStorage.getItem("careerbridge_applicants")||"[]") as User[];setRegisteredApplicants(savedApplicants);
+    try{const savedJobs=JSON.parse(localStorage.getItem("careerbridge_job_records")||"[]") as JobRecord[];if(Array.isArray(savedJobs))setJobRecords(savedJobs)}catch{}
+    setRecordsReady(true);
+    fetch("/api/auth/session").then(r=>r.ok?r.json():null).then(d=>{if(d?.user){const u=d.user.role==="Office"?{...d.user,role:"Administrator" as Role}:d.user;setUser(u);setRole(u.role)}else{const saved=localStorage.getItem("careerbridge_signup_user");if(saved){const u=JSON.parse(saved) as User;setUser(u);setRole(u.role)}}}).finally(()=>setChecking(false))
+  },[]);
+  useEffect(()=>{if(recordsReady)localStorage.setItem("careerbridge_job_records",JSON.stringify(jobRecords))},[jobRecords,recordsReady]);
   const notify=(s:string)=>{setToast(s);setTimeout(()=>setToast(""),2600)};
   const logout=async()=>{try{await fetch("/api/auth/logout",{method:"POST"})}finally{localStorage.removeItem("careerbridge_signup_user");setUser(null);setShowLogin(true);setPage("Overview")}};
   const content = useMemo(() => {
