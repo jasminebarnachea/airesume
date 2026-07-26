@@ -405,8 +405,12 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
       const accounts=JSON.parse(localStorage.getItem("careerbridge_local_accounts")||"[]") as Array<User&{password:string}>;
       if(accounts.some(account=>account.email.toLowerCase()===normalized)){setError("An account with this email already exists.");setLoading(false);return}
       const applicant:User={name:name.trim()||"New Applicant",email:normalized,role:"Applicant",avatar:photo};
-      localStorage.setItem("careerbridge_local_accounts",JSON.stringify([...accounts,{...applicant,password}]));
-      setTimeout(()=>{onLogin(applicant);setLoading(false)},350);return
+      try{
+        localStorage.setItem("careerbridge_local_accounts",JSON.stringify([...accounts,{...applicant,password}]));
+      }catch{
+        try{localStorage.setItem("careerbridge_local_accounts",JSON.stringify([...accounts,{...applicant,avatar:undefined,password}]))}catch{}
+      }
+      onLogin(applicant);setLoading(false);return
     }
     try {
       const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
@@ -669,7 +673,16 @@ export default function Home() {
   const switchRole = (r: Role) => { setRole(r==="Office"?"Administrator":r); setPage("Overview"); };
   if(checking)return <div className="loading-screen"><Brand/><span>Loading secure portal…</span></div>;
   if(!user&&!showLogin)return <LandingPage onLogin={()=>setShowLogin(true)}/>;
-  if(!user)return <LoginPage onLogin={u=>{if(u.email!=="admin@careerbridge.edu"&&u.email!=="applicant@careerbridge.edu"){localStorage.setItem("careerbridge_signup_user",JSON.stringify(u));const next=[...new Map([...registeredApplicants,u].map(x=>[x.email.toLowerCase(),x])).values()];setRegisteredApplicants(next);localStorage.setItem("careerbridge_applicants",JSON.stringify(next))}setUser(u);setRole(u.role);setPage("Overview")}}/>;
+  if(!user)return <LoginPage onLogin={u=>{
+    setUser(u);setRole(u.role);setPage("Overview");setShowLogin(false);
+    if(u.email!=="admin@careerbridge.edu"&&u.email!=="applicant@careerbridge.edu"){
+      const next=[...new Map([...registeredApplicants,u].map(x=>[x.email.toLowerCase(),x])).values()];setRegisteredApplicants(next);
+      try{
+        localStorage.setItem("careerbridge_signup_user",JSON.stringify({...u,avatar:undefined}));
+        localStorage.setItem("careerbridge_applicants",JSON.stringify(next.map(applicant=>({...applicant,avatar:undefined}))));
+      }catch{}
+    }
+  }}/>;
   const messageCount=messages.filter(m=>m.to===role&&(role!=="Applicant"||m.applicantEmail===user.email)).length;
   return <div className="app-shell" onClick={e=>{const b=(e.target as HTMLElement).closest("button");if(b&&!b.onclick&&!b.closest("form")&&!b.classList.contains("dots"))notify("Action completed")}}>
     <Sidebar role={role} page={page} setPage={setPage} open={menu} close={()=>setMenu(false)} onLogout={logout} user={user} messageCount={messageCount}/><main><Header role={role} setRole={switchRole} onMenu={()=>setMenu(true)} setPage={setPage} notify={notify} user={user} messageCount={messageCount}/>{content}</main>
