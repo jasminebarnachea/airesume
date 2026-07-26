@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import mammoth from "mammoth";
+import path from "path";
+import { pathToFileURL } from "url";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -13,6 +15,9 @@ async function extractScannedPdfText(buffer: Buffer) {
     Path2D: canvas.Path2D,
   });
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
+    path.join(process.cwd(), "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs"),
+  ).href;
   const { createWorker } = await import("tesseract.js");
   const pdf = await pdfjs.getDocument({
     data: new Uint8Array(buffer),
