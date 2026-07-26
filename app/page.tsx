@@ -424,7 +424,7 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
   return <div className="login-page" data-theme={authTheme}>
     <section className="login-visual">
       <Brand/>
-      <div className="login-copy"><div className="eyebrow"><Sparkles size={14}/> Intelligent school recruitment</div><h1>Connect talent with the right opportunity.</h1><p>CareerBridge AI makes school hiring faster, fairer, and more human with intelligent resume analysis and applicant matching.</p>
+      <div className="login-copy"><h1>Connect talent with the right opportunity.</h1><p>CareerBridge AI makes school hiring faster, fairer, and more human with intelligent resume analysis and applicant matching.</p>
         <div className="login-features"><div><WandSparkles/><span><b>AI resume insights</b><small>Instant skills and qualification analysis</small></span></div><div><Zap/><span><b>Smart job matching</b><small>Applicants ranked by true role fit</small></span></div><div><Building2/><span><b>Automated routing</b><small>Every application reaches the right office</small></span></div></div>
       </div>
       <div className="login-art"><div className="floating-card fc-one"><ScoreRing score={94} small/><span><b>Excellent match</b><small>IT Support Specialist</small></span></div><div className="floating-card fc-two"><CheckCircle2/><span><b>Application routed</b><small>Information Technology</small></span></div></div>
