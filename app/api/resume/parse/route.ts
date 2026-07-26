@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import mammoth from "mammoth";
-import path from "path";
-import { pathToFileURL } from "url";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,10 +12,10 @@ async function extractScannedPdfText(buffer: Buffer) {
     ImageData: canvas.ImageData,
     Path2D: canvas.Path2D,
   });
+  // Load the worker in-process. A worker URL is unreliable in serverless bundles
+  // because Vercel does not expose node_modules through a browser-compatible URL.
+  await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
-    path.join(process.cwd(), "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs"),
-  ).href;
   const { createWorker } = await import("tesseract.js");
   const pdf = await pdfjs.getDocument({
     data: new Uint8Array(buffer),
