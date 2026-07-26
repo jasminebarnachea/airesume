@@ -14,6 +14,8 @@
   backdrop-filter:none!important;
 }
 .landing-page[data-theme="dark"] .landing-nav{background:transparent!important;border:0!important}
+.landing-page[data-theme="dark"] .landing-main{background:#080c14!important}
+.landing-page[data-theme="dark"] .landing-cta{background:linear-gradient(135deg,#1d62ce,#103c91);border:1px solid rgba(105,161,245,.2);box-shadow:0 30px 70px rgba(0,0,0,.3)}
 .landing-page .landing-nav .landing-links button{background:transparent;box-shadow:none}
 .landing-page .landing-nav .landing-links button:hover{background:rgba(49,113,226,.08)}
 @media(max-width:560px){
