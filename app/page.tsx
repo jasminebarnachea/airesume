@@ -292,11 +292,20 @@ function AdminHome() {
 function LandingPage({onLogin}:{onLogin:()=>void}) {
   const [contact,setContact]=useState(false);const [copied,setCopied]=useState(false);
   const [theme,setTheme]=useState<"light"|"dark"|"system">("system");const [systemDark,setSystemDark]=useState(false);
+  const [buddyOpen,setBuddyOpen]=useState(false);const [buddyInput,setBuddyInput]=useState("");const [buddyLoading,setBuddyLoading]=useState(false);
+  const [buddyMessages,setBuddyMessages]=useState<Array<{role:"user"|"assistant";content:string}>>([{role:"assistant",content:"Hi! I’m CareerBuddy. Ask me anything about CareerBridge AI, resume matching, applications, or school recruitment."}]);
   const email="barnacheajassy@gmail.com";
   const go=(id:string)=>document.getElementById(id)?.scrollIntoView({behavior:"smooth"});
   useEffect(()=>{const elements=[...document.querySelectorAll<HTMLElement>(".landing-reveal")];const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){entry.target.classList.add("is-visible");observer.unobserve(entry.target)}}),{threshold:.13,rootMargin:"0px 0px -40px"});elements.forEach(element=>observer.observe(element));return()=>observer.disconnect()},[]);
   useEffect(()=>{const media=window.matchMedia("(prefers-color-scheme: dark)");const update=()=>setSystemDark(media.matches);update();media.addEventListener("change",update);const saved=localStorage.getItem("careerbridge_landing_theme");if(saved==="light"||saved==="dark"||saved==="system")setTheme(saved);return()=>media.removeEventListener("change",update)},[]);
   const selectTheme=(value:"light"|"dark"|"system")=>{setTheme(value);localStorage.setItem("careerbridge_landing_theme",value)};
+  const sendBuddy=async(event:FormEvent)=>{
+    event.preventDefault();const content=buddyInput.trim();if(!content||buddyLoading)return;
+    const next=[...buddyMessages,{role:"user" as const,content}];setBuddyMessages(next);setBuddyInput("");setBuddyLoading(true);
+    try{const response=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:next})});const data=await response.json();if(!response.ok)throw new Error(data.error);setBuddyMessages([...next,{role:"assistant",content:String(data.reply)}])}
+    catch(error){setBuddyMessages([...next,{role:"assistant",content:error instanceof Error?error.message:"CareerBuddy is temporarily unavailable."}])}
+    finally{setBuddyLoading(false)}
+  };
   const effectiveTheme=theme==="system"?(systemDark?"dark":"light"):theme;
   return <div className="landing-page" data-theme={effectiveTheme}>
     <div className="landing-bubbles" aria-hidden="true">{Array.from({length:8},(_,index)=><i key={index}/>)}</div>
@@ -309,6 +318,14 @@ function LandingPage({onLogin}:{onLogin:()=>void}) {
       <section className="landing-cta landing-reveal"><div><span>Ready to modernize school recruitment?</span><h2>Build a faster, clearer hiring experience.</h2><p>Contact us to inquire about CareerBridge AI for your school.</p></div><button onClick={()=>setContact(true)}>Inquire now <Mail size={17}/></button></section>
     </main>
     <footer className="landing-footer"><Brand/><p>AI-powered recruitment and applicant management for schools.</p><button onClick={()=>setContact(true)}>{email}</button><small>© 2026 CareerBridge AI</small></footer>
+    <button className={`careerbuddy-launcher ${buddyOpen?"open":""}`} onClick={()=>setBuddyOpen(!buddyOpen)} aria-label={buddyOpen?"Close CareerBuddy":"Open CareerBuddy"}><span><BrainCircuit size={24}/></span><b>CareerBuddy</b>{buddyOpen?<X size={17}/>:<Sparkles size={16}/>}</button>
+    {buddyOpen&&<section className="careerbuddy-panel" aria-label="CareerBuddy chat">
+      <header><div><span><BrainCircuit size={20}/></span><div><b>CareerBuddy</b><small><i/> Powered by Groq AI</small></div></div><button onClick={()=>setBuddyOpen(false)}><X size={17}/></button></header>
+      <div className="careerbuddy-messages">{buddyMessages.map((message,index)=><div className={message.role} key={index}>{message.role==="assistant"&&<span><BrainCircuit size={14}/></span>}<p>{message.content}</p></div>)}{buddyLoading&&<div className="assistant"><span><BrainCircuit size={14}/></span><p className="buddy-typing"><i/><i/><i/></p></div>}</div>
+      <div className="careerbuddy-suggestions">{["How does AI matching work?","What files can I upload?","How can I contact you?"].map(question=><button key={question} onClick={()=>setBuddyInput(question)}>{question}</button>)}</div>
+      <form onSubmit={sendBuddy}><input value={buddyInput} onChange={event=>setBuddyInput(event.target.value)} maxLength={800} placeholder="Ask CareerBuddy..."/><button disabled={!buddyInput.trim()||buddyLoading} aria-label="Send message"><Send size={17}/></button></form>
+      <small className="buddy-credit">CareerBridge AI · Developed by Jasmine Barnachea</small>
+    </section>}
     {contact&&<div className="modal-backdrop landing-contact-backdrop" onClick={()=>setContact(false)}><div className="landing-contact" onClick={event=>event.stopPropagation()}><button className="contact-close" onClick={()=>setContact(false)}><X size={18}/></button><div className="contact-icon"><Mail size={25}/></div><span>CareerBridge AI inquiries</span><h2>Let’s talk about your school’s hiring needs.</h2><p>Send your inquiry directly to:</p><a href={`mailto:${email}`}>{email}</a><div className="contact-actions"><button onClick={()=>{navigator.clipboard?.writeText(email);setCopied(true)}}>{copied?<Check size={16}/>:<FileText size={16}/>} {copied?"Email copied":"Copy email"}</button><a href={`mailto:${email}?subject=CareerBridge AI Inquiry`}>Open email app <Send size={16}/></a></div></div></div>}
   </div>
 }

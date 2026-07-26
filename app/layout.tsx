@@ -9,6 +9,7 @@ import "./auth-blue.css";
 import "./landing-3d.css";
 import "./hugeicons-font.css";
 import "./overview-dashboard.css";
+import "./careerbuddy.css";
 
 export const metadata: Metadata = {
   title: "CareerBridge AI",
