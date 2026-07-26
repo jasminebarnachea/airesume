@@ -11,8 +11,13 @@ import "./hugeicons-font.css";
 import "./overview-dashboard.css";
 
 export const metadata: Metadata = {
-  title: "CareerBridge AI — School Recruitment",
-  description: "AI-powered resume analysis and applicant management for schools."
+  title: "CareerBridge Ai",
+  description: "AI-powered resume analysis and applicant management for schools.",
+  icons: {
+    icon: "/branding/careerbridge-logo.png",
+    shortcut: "/branding/careerbridge-logo.png",
+    apple: "/branding/careerbridge-logo.png"
+  }
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

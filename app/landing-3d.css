@@ -35,6 +35,11 @@
 .app-shell .profile-mini .avatar img,
 .login-page .avatar img,
 .message-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%!important}
+.sidebar .brand>span{font-size:19px!important;letter-spacing:-.035em}
+.header-actions .icon-button{color:#111820!important}
+.header-actions .icon-button .huge-ui-icon{color:#111820!important;position:static!important;inset:auto!important;background:transparent!important;border:0!important;border-radius:0!important;padding:0!important;font-weight:400!important}
+.signup-photo .avatar{width:48px!important;height:48px!important;min-width:48px;border-radius:50%!important;display:grid!important;place-items:center!important}
+.signup-photo .avatar .huge-ui-icon{width:21px!important;height:21px!important;font-size:21px!important}
 .landing-page .landing-3d-scene i:nth-child(1),
 .landing-page .landing-3d-scene i:nth-child(4){border:1px solid rgba(45,111,224,.25);box-shadow:inset -15px -18px 26px rgba(27,87,188,.18),0 22px 42px rgba(32,91,188,.17)}
 .landing-page .landing-3d-scene i:nth-child(2),

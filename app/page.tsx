@@ -161,7 +161,7 @@ function ResumeDocument({ application }: { application: SubmittedApplication }) 
 }
 
 function Brand() {
-  return <div className="brand"><div className="brand-mark brand-logo-image"><Image src={logoResume} alt="CareerBridge AI logo"/></div><span>CareerBridge AI</span></div>;
+  return <div className="brand"><div className="brand-mark brand-logo-image"><Image src={logoResume} alt="CareerBridge Ai logo"/></div><span>CareerBridge Ai</span></div>;
 }
 
 function Sidebar({ role, page, setPage, open, close, onLogout, user, messageCount }: { role: Role; page: string; setPage: (p: string) => void; open: boolean; close: () => void; onLogout: () => void; user:User;messageCount:number }) {
@@ -343,13 +343,21 @@ function LandingPage({onLogin}:{onLogin:()=>void}) {
 }
 
 function AdminLiveHome({jobs,applications,applicants,setPage}:{jobs:JobRecord[];applications:SubmittedApplication[];applicants:User[];setPage:(page:string)=>void}) {
+  const [chartRange,setChartRange]=useState<"7"|"30"|"90">("7");
+  const [ranking,setRanking]=useState<"score"|"latest"|"review">("score");
   const openJobs=jobs.filter(job=>job.status==="Open");
   const reviewed=applications.filter(item=>item.reviewed).length;
   const interviews=applications.filter(item=>item.status==="Interview scheduled").length;
   const average=applications.length?Math.round(applications.reduce((sum,item)=>sum+item.score,0)/applications.length):0;
   const shortlisted=applications.filter(item=>item.status==="AI shortlisted"||item.status==="Priority").length;
   const pending=Math.max(0,applications.length-reviewed);
-  const weekly=[3,5,4,7,6,8,5];
+  const chartData={
+    "7":[3,5,4,7,6,8,5],
+    "30":[14,19,16,25,22,29,24],
+    "90":[38,52,47,69,63,78,71]
+  }[chartRange];
+  const chartMaximum=chartRange==="7"?8:chartRange==="30"?30:80;
+  const rankedApplications=applications.slice().sort((a,b)=>ranking==="score"?b.score-a.score:ranking==="latest"?b.id-a.id:Number(a.reviewed)-Number(b.reviewed));
   const kpis: Array<[typeof UsersRound,string,string,string,string]> = [
     [UsersRound,"Total applicants",String(applicants.length),"+18%","Applicant accounts"],
     [BriefcaseBusiness,"Open positions",String(openJobs.length),"+12%","Active opportunities"],
@@ -363,9 +371,9 @@ function AdminLiveHome({jobs,applications,applicants,setPage}:{jobs:JobRecord[];
     </div>
     <div className="overview-analytics">
       <section className="card recruitment-chart">
-        <div className="overview-panel-head"><div><h2>Application Summary</h2><p>Weekly applicant and review performance</p></div><button>Last 7 days <ChevronDown size={14}/></button></div>
+        <div className="overview-panel-head"><div><h2>Application Summary</h2><p>Applicant and review performance</p></div><label className="overview-select"><select value={chartRange} onChange={event=>setChartRange(event.target.value as "7"|"30"|"90")}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select><ChevronDown size={14}/></label></div>
         <div className="chart-legend"><span><i/>Applications</span><span><i/>Reviewed</span></div>
-        <div className="bar-chart"><div className="chart-axis"><span>8</span><span>6</span><span>4</span><span>2</span><span>0</span></div>{weekly.map((value,index)=><div className="bar-day" key={index}><div className="bar-pair"><i style={{height:`${value/8*100}%`}}/><i style={{height:`${Math.max(1,value-(index%3+1))/8*100}%`}}/></div><span>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index]}</span></div>)}</div>
+        <div className="bar-chart"><div className="chart-axis"><span>{chartMaximum}</span><span>{Math.round(chartMaximum*.75)}</span><span>{Math.round(chartMaximum*.5)}</span><span>{Math.round(chartMaximum*.25)}</span><span>0</span></div>{chartData.map((value,index)=><div className="bar-day" key={index}><div className="bar-pair"><i style={{height:`${value/chartMaximum*100}%`}}/><i style={{height:`${Math.max(1,value-(index%3+1)*(chartRange==="7"?1:3))/chartMaximum*100}%`}}/></div><span>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index]}</span></div>)}</div>
       </section>
       <section className="card status-chart">
         <div className="overview-panel-head"><div><h2>Application Status</h2><p>Current hiring pipeline</p></div><MoreHorizontal size={18}/></div>
@@ -374,9 +382,9 @@ function AdminLiveHome({jobs,applications,applicants,setPage}:{jobs:JobRecord[];
       </section>
     </div>
     <section className="card overview-table">
-      <div className="overview-panel-head"><div><h2>Applicant Performance</h2><p>Top candidates ranked by CareerBridge AI</p></div><div className="overview-table-actions"><button>Top matches <ChevronDown size={14}/></button><button onClick={()=>setPage("Candidates")}>View all <ChevronRight size={14}/></button></div></div>
+      <div className="overview-panel-head"><div><h2>Applicant Performance</h2><p>Candidates ranked by CareerBridge Ai</p></div><div className="overview-table-actions"><label className="overview-select"><select value={ranking} onChange={event=>setRanking(event.target.value as "score"|"latest"|"review")}><option value="score">Top matches</option><option value="latest">Latest applicants</option><option value="review">Needs review</option></select><ChevronDown size={14}/></label><button onClick={()=>setPage("Candidates")}>View all <ChevronRight size={14}/></button></div></div>
       <div className="overview-table-head"><span>Applicant</span><span>Position</span><span>AI match</span><span>Review status</span><span>Recommendation</span></div>
-      {applications.slice().sort((a,b)=>b.score-a.score).slice(0,5).map(item=><div className="overview-table-row" key={item.id}><div><div className="avatar">{item.applicantAvatar?<img src={item.applicantAvatar} alt={item.name}/>:item.name.split(" ").map(x=>x[0]).join("").slice(0,2)}</div><span><b>{item.name}</b><small>{item.email}</small></span></div><span><b>{item.job}</b><small>{item.office}</small></span><strong>{item.score}%</strong><span className={`status ${item.reviewed?"reviewed":"under-review"}`}>{item.reviewed?"Reviewed":"In review"}</span><em className={item.score>=90?"top-match":"good-match"}>{item.score>=90?"Top match":"Good match"}</em></div>)}
+      {rankedApplications.slice(0,5).map(item=><div className="overview-table-row" key={item.id}><div><div className="avatar">{item.applicantAvatar?<img src={item.applicantAvatar} alt={item.name}/>:item.name.split(" ").map(x=>x[0]).join("").slice(0,2)}</div><span><b>{item.name}</b><small>{item.email}</small></span></div><span><b>{item.job}</b><small>{item.office}</small></span><strong>{item.score}%</strong><span className={`status ${item.reviewed?"reviewed":"under-review"}`}>{item.reviewed?"Reviewed":"In review"}</span><em className={item.score>=90?"top-match":"good-match"}>{item.score>=90?"Top match":"Good match"}</em></div>)}
     </section>
   </div>
 }
@@ -398,18 +406,36 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [signup,setSignup]=useState(false); const [name,setName]=useState(""); const [photo,setPhoto]=useState("");
+  const [authTheme,setAuthTheme]=useState<"light"|"dark">("light");
+  useEffect(()=>{
+    const media=window.matchMedia("(prefers-color-scheme: dark)");
+    const apply=()=>{const preference=localStorage.getItem("careerbridge_landing_theme")||"system";setAuthTheme(preference==="dark"||(preference==="system"&&media.matches)?"dark":"light")};
+    apply();media.addEventListener("change",apply);return()=>media.removeEventListener("change",apply);
+  },[]);
   async function submit(e: FormEvent) {
     e.preventDefault(); setError(""); setLoading(true);
-    if(signup){setTimeout(()=>{onLogin({name:name||"New Applicant",email,role:"Applicant",avatar:photo});setLoading(false)},500);return}
+    if(signup){
+      const normalized=email.trim().toLowerCase();
+      const accounts=JSON.parse(localStorage.getItem("careerbridge_local_accounts")||"[]") as Array<User&{password:string}>;
+      if(accounts.some(account=>account.email.toLowerCase()===normalized)){setError("An account with this email already exists.");setLoading(false);return}
+      const applicant:User={name:name.trim()||"New Applicant",email:normalized,role:"Applicant",avatar:photo};
+      localStorage.setItem("careerbridge_local_accounts",JSON.stringify([...accounts,{...applicant,password}]));
+      setTimeout(()=>{onLogin(applicant);setLoading(false)},350);return
+    }
     try {
       const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Unable to sign in");
       onLogin(data.user);
-    } catch (e) { setError(e instanceof Error ? e.message : "Unable to sign in"); }
+    } catch (e) {
+      const accounts=JSON.parse(localStorage.getItem("careerbridge_local_accounts")||"[]") as Array<User&{password:string}>;
+      const account=accounts.find(item=>item.email.toLowerCase()===email.trim().toLowerCase()&&item.password===password);
+      if(account){const {password:_password,...applicant}=account;onLogin(applicant)}
+      else setError(e instanceof Error ? e.message : "Unable to sign in");
+    }
     finally { setLoading(false); }
   }
-  return <div className="login-page">
+  return <div className="login-page" data-theme={authTheme}>
     <section className="login-visual">
       <Brand/>
       <div className="login-copy"><div className="eyebrow"><Sparkles size={14}/> Intelligent school recruitment</div><h1>Connect talent with the right opportunity.</h1><p>CareerBridge AI makes school hiring faster, fairer, and more human with intelligent resume analysis and applicant matching.</p>
