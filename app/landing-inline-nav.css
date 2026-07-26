@@ -1,0 +1,22 @@
+.landing-page .landing-nav{
+  position:absolute!important;
+  left:50%!important;
+  top:18px!important;
+  transform:translateX(-50%)!important;
+  z-index:20!important;
+  width:min(1180px,calc(100% - 40px))!important;
+  height:54px!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+}
+.landing-page[data-theme="dark"] .landing-nav{background:transparent!important;border:0!important}
+.landing-page .landing-nav .landing-links button{background:transparent;box-shadow:none}
+.landing-page .landing-nav .landing-links button:hover{background:rgba(49,113,226,.08)}
+@media(max-width:560px){
+  .landing-page .landing-nav{top:8px!important;width:calc(100% - 24px)!important;height:54px!important}
+  .landing-page .landing-hero{padding-top:92px!important}
+}
