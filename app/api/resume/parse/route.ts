@@ -4,6 +4,30 @@ import mammoth from "mammoth";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+type UploadedFile = {
+  name: string;
+  type?: string;
+  size?: number;
+  arrayBuffer: () => Promise<ArrayBuffer>;
+};
+
+function isUploadedFile(value: FormDataEntryValue | null): value is FormDataEntryValue & UploadedFile {
+  return Boolean(
+    value &&
+    typeof value !== "string" &&
+    typeof (value as UploadedFile).name === "string" &&
+    typeof (value as UploadedFile).arrayBuffer === "function",
+  );
+}
+
+function cleanExtractedText(value: string) {
+  return value
+    .replace(/\u0000/g, "")
+    .replace(/[^\S\r\n]+/g, " ")
+    .replace(/\n{4,}/g, "\n\n\n")
+    .trim();
+}
+
 async function extractScannedPdfText(buffer: Buffer) {
   const canvas = await import("@napi-rs/canvas");
   // pdf.js expects these browser drawing primitives even when it renders in Node.
@@ -45,23 +69,67 @@ async function extractScannedPdfText(buffer: Buffer) {
 
 export async function POST(request: Request) {
   try {
-    const form = await request.formData();
+    let form: FormData;
+    try {
+      form = await request.formData();
+    } catch {
+      return NextResponse.json({
+        error: "The upload could not be received. Please select a PDF or DOCX smaller than 4 MB and try again.",
+      }, { status: 400 });
+    }
     const file = form.get("resume");
     const jobDescription = String(form.get("jobDescription") || "");
-    if (!(file instanceof File)) return NextResponse.json({ error: "Resume file is required." }, { status: 400 });
+    // Multipart files can come from a different JavaScript realm on Vercel.
+    // Feature detection accepts the valid upload without relying on `instanceof File`.
+    if (!isUploadedFile(file)) return NextResponse.json({ error: "Resume file is required." }, { status: 400 });
+    if (Number(file.size || 0) > 4 * 1024 * 1024) {
+      return NextResponse.json({
+        error: "This resume is larger than the deployed upload limit. Please upload a PDF or DOCX smaller than 4 MB.",
+      }, { status: 413 });
+    }
     const buffer = Buffer.from(await file.arrayBuffer());
+    if (!buffer.length) return NextResponse.json({ error: "The selected resume is empty. Please choose the file again." }, { status: 400 });
+    const lowerName = file.name.toLowerCase();
+    const isPdf = lowerName.endsWith(".pdf") || file.type === "application/pdf";
+    const isDocx = lowerName.endsWith(".docx") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const hasPdfSignature = buffer.subarray(0, 1024).includes(Buffer.from("%PDF-"));
+    const hasZipSignature = buffer[0] === 0x50 && buffer[1] === 0x4b;
+    if (isPdf && !hasPdfSignature) {
+      return NextResponse.json({ error: "The selected file has a .pdf name but is not a readable PDF. Export it as PDF again, then re-upload it." }, { status: 415 });
+    }
+    if (isDocx && !hasZipSignature) {
+      return NextResponse.json({ error: "The selected file has a .docx name but is not a readable Word document. Save it as DOCX again, then re-upload it." }, { status: 415 });
+    }
     let resumeText = "";
-    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+    if (isPdf) {
       const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
-      resumeText = (await pdfParse(buffer)).text;
-      if (resumeText.replace(/\s/g, "").length < 40) {
-        resumeText = await extractScannedPdfText(buffer);
+      try {
+        resumeText = (await pdfParse(buffer)).text;
+      } catch (error) {
+        console.warn("PDF text extraction failed; attempting OCR fallback:", error);
       }
-    } else if (file.name.toLowerCase().endsWith(".docx")) {
-      resumeText = (await mammoth.extractRawText({ buffer })).value;
+      if (resumeText.replace(/\s/g, "").length < 40) {
+        try {
+          resumeText = await extractScannedPdfText(buffer);
+        } catch (error) {
+          console.error("PDF OCR fallback failed:", error);
+          return NextResponse.json({
+            error: "This PDF could not be read. If it is password-protected, unlock it first; otherwise export it as a standard PDF or DOCX and try again.",
+          }, { status: 422 });
+        }
+      }
+    } else if (isDocx) {
+      try {
+        resumeText = (await mammoth.extractRawText({ buffer })).value;
+      } catch {
+        return NextResponse.json({
+          error: "This Word document could not be read. Save it as a standard DOCX or PDF and try again.",
+        }, { status: 422 });
+      }
     } else {
       return NextResponse.json({ error: "Please upload a PDF or DOCX resume." }, { status: 415 });
     }
+    resumeText = cleanExtractedText(resumeText);
     if (resumeText.replace(/\s/g, "").length < 20) {
       return NextResponse.json({
         error: "The resume could not be read after text extraction and OCR. Please upload a clearer PDF or a DOCX file.",

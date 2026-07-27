@@ -617,6 +617,7 @@ function JobPostingsPage({ role,notify,records,setRecords,setSubmitted,user }:{r
     const f=new FormData(e.currentTarget);
     try{
       const resume=resumeFile;
+      if(resume.size>4*1024*1024)throw new Error("This resume is too large for the deployed upload limit. Please upload a PDF or DOCX smaller than 4 MB.");
       const openJobs=records.filter(j=>j.status==="Open");
       if(!openJobs.length)throw new Error("There are no open jobs available for matching.");
       const aiForm=new FormData();aiForm.append("resume",resume);
@@ -624,7 +625,10 @@ function JobPostingsPage({ role,notify,records,setRecords,setSubmitted,user }:{r
       const response=await fetch("/api/resume/parse",{method:"POST",body:aiForm});
       const responseText=await response.text();
       let analysis:Record<string,unknown>;
-      try{analysis=JSON.parse(responseText) as Record<string,unknown>}catch{throw new Error("The resume service returned an invalid response. Please try again.")}
+      try{analysis=JSON.parse(responseText) as Record<string,unknown>}catch{
+        if(response.status===413)throw new Error("This resume is too large for the deployed upload limit. Please upload a PDF or DOCX smaller than 4 MB.");
+        throw new Error(`The deployed resume service returned an invalid response (${response.status||"network error"}). Please try again.`);
+      }
       if(!response.ok)throw new Error(String(analysis.error||"Unable to analyze this resume."));
       const ranked=(Array.isArray(analysis.jobMatches)?analysis.jobMatches:[]).sort((a:{score:number},b:{score:number})=>Number(b.score)-Number(a.score));
       const qualified=ranked.filter((match:{score:number;skillScore?:number;qualificationScore?:number})=>{
