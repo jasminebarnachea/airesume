@@ -83,8 +83,42 @@ export async function POST(request: Request) {
     });
     if (!ai.ok) return NextResponse.json({ error: "Groq analysis failed." }, { status: 502 });
     const data = await ai.json();
+    const rawContent = String(data.choices?.[0]?.message?.content || "").trim();
+    const parsed = JSON.parse(rawContent.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
+    const strings = (value: unknown): string[] => Array.isArray(value)
+      ? value.map(item => typeof item === "string" ? item : item && typeof item === "object"
+        ? Object.values(item as Record<string, unknown>).filter(Boolean).join(" — ")
+        : String(item)).map(item => item.trim()).filter(Boolean)
+      : [];
+    const clamp = (value: unknown, fallback = 0) => Math.min(100, Math.max(0, Number.isFinite(Number(value)) ? Math.round(Number(value)) : fallback));
+    const jobMatches = Array.isArray(parsed.jobMatches) ? parsed.jobMatches.map((match: Record<string, unknown>) => {
+      const matchedSkills = strings(match.matchedSkills);
+      const missingSkills = strings(match.missingSkills);
+      const measuredSkillScore = matchedSkills.length + missingSkills.length
+        ? Math.round(matchedSkills.length / (matchedSkills.length + missingSkills.length) * 100)
+        : clamp(match.score);
+      const skillScore = clamp(match.skillScore, measuredSkillScore);
+      const qualificationScore = clamp(match.qualificationScore, clamp(match.score));
+      return {
+        ...match,
+        title: String(match.title || ""),
+        score: clamp(match.score, Math.round(skillScore * .6 + qualificationScore * .4)),
+        skillScore,
+        qualificationScore,
+        matchedSkills,
+        missingSkills,
+      };
+    }).sort((a: { score: number }, b: { score: number }) => b.score - a.score) : [];
     return NextResponse.json({
-      ...JSON.parse(data.choices[0].message.content),
+      ...parsed,
+      skills: strings(parsed.skills),
+      education: strings(parsed.education),
+      experience: strings(parsed.experience),
+      qualifications: strings(parsed.qualifications),
+      missingSkills: strings(parsed.missingSkills),
+      interviewSuggestions: strings(parsed.interviewSuggestions),
+      matchScore: clamp(parsed.matchScore, jobMatches[0]?.score || 0),
+      jobMatches,
       extractedText: resumeText.slice(0, 30000),
       extractedTextLength: resumeText.length,
     });

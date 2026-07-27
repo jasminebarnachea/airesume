@@ -5,6 +5,31 @@ import Image from "next/image";
 import aiResumeHero from "./components/AiResume.png";
 import aiResumeMobile from "./components/AiResume2.png";
 import logoResume from "./components/logoresume.png";
+import { Card as UiCard, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button as UiButton } from "@/components/ui/button";
+import { ApplicationStatusDonut, RecruitmentAreaChart } from "@/components/careerbridge-charts";
+import {
+  Sidebar as UiSidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import { Input as UiInput } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 type HugeIconProps = {
   size?: number | string;
@@ -87,12 +112,54 @@ type SubmittedApplication={
   applicantAvatar?:string;
   education?:string[];experience?:string[];qualifications?:string[];missingSkills?:string[];
   interviewSuggestions?:string[];interviewDate?:string;interviewTime?:string;
-  interviewMethod?:string;interviewLocation?:string
+  interviewMethod?:string;interviewLocation?:string;interviewConfirmed?:boolean
 };
 
 const applications: Application[] = [];
 const jobs: Array<{role:string;office:string;type:string;score:number;skills:string[];accent:string}> = [];
 const candidates: Array<{name:string;role:string;score:number;status:string;initials:string}> = [];
+const APPLICATION_STORE_KEY="careerbridge_submitted_applications";
+
+async function loadStoredApplications():Promise<SubmittedApplication[]> {
+  if(!("indexedDB" in window)){
+    try{return JSON.parse(localStorage.getItem(APPLICATION_STORE_KEY)||"[]") as SubmittedApplication[]}catch{return []}
+  }
+  return new Promise(resolve=>{
+    const request=indexedDB.open("careerbridge-ai",1);
+    request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains("recruitment"))request.result.createObjectStore("recruitment")};
+    request.onerror=()=>{try{resolve(JSON.parse(localStorage.getItem(APPLICATION_STORE_KEY)||"[]") as SubmittedApplication[])}catch{resolve([])}};
+    request.onsuccess=()=>{
+      const transaction=request.result.transaction("recruitment","readonly");
+      const get=transaction.objectStore("recruitment").get("applications");
+      get.onsuccess=()=>resolve(Array.isArray(get.result)?get.result:[]);
+      get.onerror=()=>resolve([]);
+      transaction.oncomplete=()=>request.result.close();
+    };
+  });
+}
+
+async function saveStoredApplications(items:SubmittedApplication[]) {
+  const metadata=items.map(({resumeUrl,...item})=>item);
+  try{localStorage.setItem(APPLICATION_STORE_KEY,JSON.stringify(metadata))}catch{}
+  if(!("indexedDB" in window))return;
+  await new Promise<void>(resolve=>{
+    const request=indexedDB.open("careerbridge-ai",1);
+    request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains("recruitment"))request.result.createObjectStore("recruitment")};
+    request.onerror=()=>resolve();
+    request.onsuccess=()=>{
+      const transaction=request.result.transaction("recruitment","readwrite");
+      transaction.objectStore("recruitment").put(items,"applications");
+      transaction.oncomplete=()=>{request.result.close();resolve()};
+      transaction.onerror=()=>{request.result.close();resolve()};
+    };
+  });
+}
+
+const isQualifiedCandidate=(item:SubmittedApplication)=>{
+  const skill=item.skillScore??item.score;
+  const qualification=item.qualificationScore??item.score;
+  return item.score>=70&&skill>=70||skill>=80||qualification>=80;
+};
 
 function downloadExcel(filename:string,headers:string[],rows:Array<Array<string|number>>) {
   const escape=(value:string|number)=>String(value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
@@ -136,6 +203,7 @@ function Brand() {
 }
 
 function Sidebar({ role, page, setPage, open, close, onLogout, user, messageCount }: { role: Role; page: string; setPage: (p: string) => void; open: boolean; close: () => void; onLogout: () => void; user:User;messageCount:number }) {
+  const {setOpenMobile}=useSidebar();
   const applicant = [
     ["Overview", LayoutDashboard], ["Find jobs", Search], ["My applications", FileText],
     ["Messages", MessageCircle], ["Interviews", CalendarDays]
@@ -150,47 +218,43 @@ function Sidebar({ role, page, setPage, open, close, onLogout, user, messageCoun
     ["Messages", MessageCircle], ["AI insights", WandSparkles], ["Workflows", Zap]
   ] as const;
   const items = role === "Applicant" ? applicant : role === "Office" ? office : admin;
-  return (
-    <>
-      {open && <button className="backdrop" onClick={close} aria-label="Close menu" />}
-      <aside className={`sidebar ${open ? "open" : ""}`}>
-        <div className="sidebar-top"><Brand /><button className="mobile-close" onClick={close}><X size={20}/></button></div>
-        <div className="role-caption">{role} portal</div>
-        <nav>{items.map(([label, Icon]) => (
-          <button key={label} className={page === label ? "active" : ""} onClick={() => { setPage(label); close(); }}>
-            <Icon size={19} /><span>{label}</span>{label === "Messages"&&messageCount>0&&<em>{messageCount}</em>}
-          </button>
-        ))}</nav>
-        <div className="sidebar-bottom">
-          <button onClick={()=>setPage("Settings")}><Settings size={19}/> Settings</button>
-          <button onClick={onLogout}><LogOut size={19}/> Sign out</button>
-          <div className="profile-mini"><div className="avatar">{role==="Administrator"?<Image src={logoResume} alt="CareerBridge AI administrator"/>:user.avatar?<img src={user.avatar} alt={user.name}/>:user.name.split(" ").map(x=>x[0]).join("").slice(0,2)}</div><div><b>{user.name}</b><span>{role}</span></div><MoreHorizontal size={18}/></div>
-        </div>
-      </aside>
-    </>
-  );
+  const initials=user.name.split(" ").map(part=>part[0]).join("").slice(0,2);
+  return <UiSidebar variant="inset" collapsible="icon" className={`career-ui-sidebar role-${role.toLowerCase()}`}>
+    <SidebarHeader><div className="career-sidebar-brand"><Brand/><SidebarTrigger className="career-collapse-trigger"/></div></SidebarHeader>
+    <SidebarContent>
+      <SidebarGroup>
+        <SidebarGroupLabel>{role} portal</SidebarGroupLabel>
+        <SidebarGroupContent><SidebarMenu>{items.map(([label,Icon])=><SidebarMenuItem key={label}><SidebarMenuButton isActive={page===label} tooltip={label} onClick={()=>{setPage(label);setOpenMobile(false);close()}}><Icon size={18}/><span>{label}</span></SidebarMenuButton>{label==="Messages"&&messageCount>0&&<SidebarMenuBadge>{messageCount}</SidebarMenuBadge>}</SidebarMenuItem>)}</SidebarMenu></SidebarGroupContent>
+      </SidebarGroup>
+    </SidebarContent>
+    <SidebarFooter><SidebarMenu>
+      <SidebarMenuItem><SidebarMenuButton isActive={page==="Settings"} tooltip="Settings" onClick={()=>setPage("Settings")}><Settings size={18}/><span>Settings</span></SidebarMenuButton></SidebarMenuItem>
+      <SidebarMenuItem><SidebarMenuButton tooltip="Sign out" onClick={onLogout}><LogOut size={18}/><span>Sign out</span></SidebarMenuButton></SidebarMenuItem>
+    </SidebarMenu><div className="career-sidebar-user"><Avatar><AvatarImage src={role==="Administrator"?logoResume.src:user.avatar}/><AvatarFallback>{initials}</AvatarFallback></Avatar><span><b>{user.name}</b><small>{role}</small></span><MoreHorizontal size={17}/></div></SidebarFooter>
+    <SidebarRail/>
+  </UiSidebar>;
 }
 
-function Header({ role, setRole, onMenu, setPage, notify,user,messageCount }: { role: Role; setRole: (r: Role) => void; onMenu: () => void; setPage:(p:string)=>void; notify:(s:string)=>void;user:User;messageCount:number }) {
+function Header({ role, setRole, onMenu, setPage, notify,user,messageCount,notifications,notificationCount,onNotificationsRead }: { role: Role; setRole: (r: Role) => void; onMenu: () => void; setPage:(p:string)=>void; notify:(s:string)=>void;user:User;messageCount:number;notifications:Array<{id:string;title:string;detail:string;page:string}>;notificationCount:number;onNotificationsRead:()=>void }) {
   const [rolesOpen, setRolesOpen] = useState(false);
   const [panel,setPanel]=useState<"notifications"|"search"|null>(null); const [search,setSearch]=useState("");
   const results=(role==="Applicant"?["Find jobs","My applications","Messages","Interviews","Settings"]:["Applicants","Applications","Candidates","Job postings","Interviews","Messages","AI insights","Workflows","Settings"]).filter(x=>x.toLowerCase().includes(search.toLowerCase()));
   return (
     <header>
-      <button className="menu-button" onClick={onMenu}><Menu size={22}/></button>
-      <div className="top-search" onClick={()=>setPanel("search")}><Search size={18}/><input value={search} onChange={e=>{setSearch(e.target.value);setPanel("search")}} placeholder="Search jobs, applicants, messages..." /><kbd>⌘ K</kbd></div>
+      <SidebarTrigger className="career-header-trigger" onClick={onMenu}/>
+      <div className="top-search" onClick={()=>setPanel("search")}><Search size={18}/><UiInput value={search} onChange={e=>{setSearch(e.target.value);setPanel("search")}} placeholder="Search jobs, applicants, messages..." /><kbd>⌘ K</kbd></div>
       <div className="header-actions">
-        <button className="icon-button" onClick={()=>setPanel(panel==="notifications"?null:"notifications")}><Bell size={20}/></button>
+        <button className="icon-button" aria-label={`Notifications${notificationCount?` (${notificationCount} new)`:""}`} onClick={()=>{const opening=panel!=="notifications";setPanel(opening?"notifications":null);if(opening)onNotificationsRead()}}><Bell size={20}/>{notificationCount>0&&<i>{notificationCount}</i>}</button>
         <div className="avatar">{role==="Administrator"?<Image src={logoResume} alt="CareerBridge AI administrator"/>:user.avatar?<img src={user.avatar} alt={user.name}/>:user.name.split(" ").map(x=>x[0]).join("").slice(0,2)}</div>
       </div>
       {panel==="search"&&<div className="header-panel search-panel"><div className="panel-head"><b>Search CareerBridge</b><button onClick={()=>setPanel(null)}><X size={16}/></button></div>{search?<>{results.map(x=><button key={x} onClick={()=>{setPage(x);setPanel(null)}}><Search size={14}/><span>{x}<small>Open page</small></span><ChevronRight size={14}/></button>)}{!results.length&&<p>No results found.</p>}</>:<p>Type a page name to navigate.</p>}</div>}
-      {panel==="notifications"&&<div className="header-panel notification-panel"><div className="panel-head"><b>Notifications</b><button onClick={()=>setPanel(null)}><X size={16}/></button></div><p>No new notifications.</p></div>}
+      {panel==="notifications"&&<div className="header-panel notification-panel"><div className="panel-head"><b>Notifications</b><button onClick={()=>setPanel(null)}><X size={16}/></button></div>{notifications.length?notifications.map(item=><button className="notification-item" key={item.id} onClick={()=>{setPage(item.page);setPanel(null)}}><div className="notification-logo">{role==="Applicant"?<Image src={logoResume} alt="CareerBridge AI"/>:<UsersRound size={16}/>}</div><span><b>{item.title}</b><small>{item.detail}</small></span><ChevronRight size={14}/></button>):<p>No new notifications.</p>}</div>}
     </header>
   );
 }
 
 function Metric({ label, value, note, icon: Icon, tint }: { label: string; value: string; note: string; icon: typeof UsersRound; tint: string }) {
-  return <div className="metric card"><div className="metric-icon" style={{ background: tint }}><Icon size={21}/></div><div><span>{label}</span><strong>{value}</strong><small>{note}</small></div><div className="spark"><i/><i/><i/><i/><i/></div></div>;
+  return <UiCard className="metric"><CardContent><div className="metric-icon" style={{ background: tint }}><Icon size={21}/></div><div><span>{label}</span><strong>{value}</strong><small>{note}</small></div><div className="spark"><i/><i/><i/><i/><i/></div></CardContent></UiCard>;
 }
 
 function ApplicantHome({ setPage }: { setPage: (p: string) => void }) {
@@ -223,9 +287,12 @@ function ApplicantHome({ setPage }: { setPage: (p: string) => void }) {
   </div>;
 }
 
-function NewApplicantHome({user,setPage,jobs}:{user:User;setPage:(p:string)=>void;jobs:JobRecord[]}) {
+function NewApplicantHome({user,setPage,jobs,items,messages,readMessageIds}:{user:User;setPage:(p:string)=>void;jobs:JobRecord[];items:SubmittedApplication[];messages:SharedMessage[];readMessageIds:number[]}) {
   const open=jobs.filter(j=>j.status==="Open");
-  return <div className="page-content"><section className="welcome hero-gradient"><div><div className="eyebrow"><UserRound size={14}/> New applicant account</div><h1>Welcome, {user.name}</h1><p>Your account is ready. Upload one resume from Find Jobs and CareerBridge will identify your strongest job match.</p><div className="hero-actions"><button className="primary" onClick={()=>setPage("Find jobs")}>View open jobs <ChevronRight size={17}/></button></div></div></section><div className="metrics new-account-metrics"><Metric label="Applications" value="0" note="No applications yet" icon={FileText} tint="#eef4ff"/><Metric label="Interviews" value="0" note="No interviews scheduled" icon={CalendarDays} tint="#eef4ff"/><Metric label="Messages" value="0" note="No new messages" icon={MessageCircle} tint="#eef4ff"/></div><section className="card panel"><div className="panel-title"><div><h2>Open school positions</h2><p>Current jobs published by Admin/HR</p></div><button className="text-button" onClick={()=>setPage("Find jobs")}>View all <ChevronRight size={15}/></button></div><div className="job-list">{open.map((job,i)=><div className="job-row" key={job.id}><div className="job-logo" style={{background:["#3478f6","#4f8de9","#5b7fce"][i%3]}}><BriefcaseBusiness size={19}/></div><div className="job-main"><b>{job.title}</b><span>{job.office} · {job.type} · {job.location}</span><div><small>{job.status}</small></div></div><button className="arrow-button" onClick={()=>setPage("Find jobs")}><ChevronRight size={18}/></button></div>)}</div></section></div>
+  const mine=items.filter(item=>item.email.toLowerCase()===user.email.toLowerCase());
+  const pendingInterviews=mine.filter(item=>item.status==="Interview scheduled"&&!item.interviewConfirmed).length;
+  const unreadMessages=messages.filter(message=>message.to==="Applicant"&&message.applicantEmail===user.email&&!readMessageIds.includes(message.id)).length;
+  return <div className="page-content shadcn-applicant-home"><UiCard className="welcome hero-gradient"><CardContent><div><Badge variant="secondary"><UserRound size={14}/> Applicant workspace</Badge><h1>Welcome, {user.name}</h1><p>Your account is ready. Upload one resume and CareerBridge will identify your strongest job match.</p><UiButton onClick={()=>setPage("Find jobs")}>View open jobs <ChevronRight size={17}/></UiButton></div></CardContent></UiCard><div className="metrics new-account-metrics"><Metric label="Applications" value={String(mine.length)} note={mine.length?`${mine.length} matched application${mine.length===1?"":"s"}`:"No applications yet"} icon={FileText} tint="#eef4ff"/><Metric label="Interviews" value={String(pendingInterviews)} note={pendingInterviews?`${pendingInterviews} awaiting confirmation`:"No interviews scheduled"} icon={CalendarDays} tint="#eef4ff"/><Metric label="Messages" value={String(unreadMessages)} note={unreadMessages?`${unreadMessages} unread message${unreadMessages===1?"":"s"}`:"No new messages"} icon={MessageCircle} tint="#eef4ff"/></div><UiCard className="panel"><CardHeader className="panel-title"><div><CardTitle>Open school positions</CardTitle><CardDescription>Current jobs published by Admin/HR</CardDescription></div><UiButton variant="ghost" onClick={()=>setPage("Find jobs")}>View all <ChevronRight size={15}/></UiButton></CardHeader><CardContent><div className="job-list">{open.map((job,i)=><div className="job-row" key={job.id}><div className="job-logo" style={{background:["#3478f6","#4f8de9","#5b7fce"][i%3]}}><BriefcaseBusiness size={19}/></div><div className="job-main"><b>{job.title}</b><span>{job.office} · {job.type} · {job.location}</span><div><Badge variant="outline">{job.status}</Badge></div></div><UiButton variant="ghost" size="icon" onClick={()=>setPage("Find jobs")}><ChevronRight size={18}/></UiButton></div>)}</div></CardContent></UiCard></div>
 }
 
 function ResumeAnalysis() {
@@ -340,7 +407,7 @@ function AdminLiveHome({jobs,applications,applicants,setPage}:{jobs:JobRecord[];
   const shortlisted=applications.filter(item=>item.status==="AI shortlisted"||item.status==="Priority").length;
   const pending=Math.max(0,applications.length-reviewed);
   const chartData=applications.reduce((counts,item)=>{counts[Math.abs(item.id)%7]+=1;return counts},[0,0,0,0,0,0,0]);
-  const chartMaximum=Math.max(1,...chartData);
+  const shadcnChartData=chartData.map((value,index)=>({day:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index],applications:value,reviewed:applications.filter(item=>Math.abs(item.id)%7===index&&item.reviewed).length}));
   const rankedApplications=applications.slice().sort((a,b)=>ranking==="score"?b.score-a.score:ranking==="latest"?b.id-a.id:Number(a.reviewed)-Number(b.reviewed));
   const kpis: Array<[typeof UsersRound,string,string,string,string]> = [
     [UsersRound,"Total applicants",String(applicants.length),"Live","Applicant accounts"],
@@ -350,21 +417,13 @@ function AdminLiveHome({jobs,applications,applicants,setPage}:{jobs:JobRecord[];
   ];
   const exportInsights=()=>downloadExcel("careerbridge-ai-insights.xls",["Applicant","Email","Position","Office","AI Match","Skill Score","Status"],applications.map(item=>[item.name,item.email,item.job,item.office,`${item.score}%`,`${item.skillScore??item.score}%`,item.status]));
   return <div className="page-content overview-dashboard">
-    <div className="overview-title"><div><h1>Dashboard Overview</h1><p>Recruitment activity and AI performance across all school positions.</p></div><button className="overview-export" onClick={exportInsights}><Download size={17}/> Export insights</button></div>
+    <div className="overview-title"><div><Badge variant="secondary">Administrator workspace</Badge><h1>Dashboard Overview</h1><p>Recruitment activity and AI performance across all school positions.</p></div><UiButton onClick={exportInsights}><Download size={17}/> Export insights</UiButton></div>
     <div className="overview-kpis">
-      {kpis.map(([Icon,label,value,trend,note])=><article className="card overview-kpi" key={label}><div className="overview-kpi-head"><span><Icon size={18}/>{label}</span><MoreHorizontal size={17}/></div><div><strong>{value}</strong><b><TrendingUp size={13}/>{trend}</b></div><small>{note}</small></article>)}
+      {kpis.map(([Icon,label,value,trend,note])=><UiCard className="overview-kpi" key={label}><CardHeader><CardDescription><Icon size={18}/>{label}</CardDescription><Badge variant="outline"><TrendingUp size={13}/>{trend}</Badge></CardHeader><CardContent><CardTitle>{value}</CardTitle><small>{note}</small></CardContent></UiCard>)}
     </div>
     <div className="overview-analytics">
-      <section className="card recruitment-chart">
-        <div className="overview-panel-head"><div><h2>Application Summary</h2><p>Applicant and review performance</p></div><label className="overview-select"><select value={chartRange} onChange={event=>setChartRange(event.target.value as "7"|"30"|"90")}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select><ChevronDown size={14}/></label></div>
-        <div className="chart-legend"><span><i/>Applications</span><span><i/>Reviewed</span></div>
-        <div className="bar-chart"><div className="chart-axis"><span>{chartMaximum}</span><span>{Math.round(chartMaximum*.75)}</span><span>{Math.round(chartMaximum*.5)}</span><span>{Math.round(chartMaximum*.25)}</span><span>0</span></div>{chartData.map((value,index)=><div className="bar-day" key={index}><div className="bar-pair"><i style={{height:`${value/chartMaximum*100}%`}}/><i style={{height:`${applications.filter(item=>Math.abs(item.id)%7===index&&item.reviewed).length/chartMaximum*100}%`}}/></div><span>{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][index]}</span></div>)}</div>
-      </section>
-      <section className="card status-chart">
-        <div className="overview-panel-head"><div><h2>Application Status</h2><p>Current hiring pipeline</p></div><MoreHorizontal size={18}/></div>
-        <div className="overview-donut-wrap"><div className="overview-donut" style={{"--reviewed":`${applications.length?reviewed/applications.length*100:0}%`,"--interview":`${applications.length?interviews/applications.length*100:0}%`,"--shortlisted":`${applications.length?shortlisted/applications.length*100:0}%`} as React.CSSProperties}><div><b>{applications.length}</b><span>Total</span></div></div></div>
-        <div className="status-legend"><span><i className="reviewed"/><b>Reviewed</b><em>{reviewed}</em></span><span><i className="interview"/><b>Interview</b><em>{interviews}</em></span><span><i className="shortlisted"/><b>Shortlisted</b><em>{shortlisted}</em></span><span><i className="pending"/><b>Pending</b><em>{pending}</em></span></div>
-      </section>
+      <RecruitmentAreaChart data={shadcnChartData} range={chartRange} onRangeChange={setChartRange}/>
+      <ApplicationStatusDonut reviewed={reviewed} interviews={interviews} shortlisted={shortlisted} pending={pending}/>
     </div>
     <section className="card overview-table">
       <div className="overview-panel-head"><div><h2>Applicant Performance</h2><p>Candidates ranked by CareerBridge AI</p></div><div className="overview-table-actions"><label className="overview-select"><select value={ranking} onChange={event=>setRanking(event.target.value as "score"|"latest"|"review")}><option value="score">Top matches</option><option value="latest">Latest applicants</option><option value="review">Needs review</option></select><ChevronDown size={14}/></label><button onClick={()=>setPage("Candidates")}>View all <ChevronRight size={14}/></button></div></div>
@@ -467,7 +526,7 @@ function MessagesPage({ role,messages,setMessages,user,applicants }: { role: Rol
   const [selected,setSelected]=useState(0); const [draft,setDraft]=useState("");
   const applicantContacts=[...new Map(applicants.map(a=>[a.email.toLowerCase(),{name:a.name,email:a.email,avatar:a.applicantAvatar}])).values()];
   if(user.email==="applicant@careerbridge.edu"&&!applicantContacts.some(a=>a.email===user.email))applicantContacts.unshift({name:user.name,email:user.email,avatar:user.avatar});
-  const contacts=role==="Applicant"?[{name:"Admin / HR",email:"admin@careerbridge.edu",avatar:undefined as string|undefined}]:applicantContacts;
+  const contacts=role==="Applicant"?[{name:"Admin / HR",email:"admin@careerbridge.edu",avatar:logoResume.src as string|undefined}]:applicantContacts;
   const contact=contacts[Math.min(selected,Math.max(contacts.length-1,0))];
   const applicantEmail=role==="Applicant"?user.email:contact?.email;
   const thread=messages.filter(m=>m.applicantEmail===applicantEmail&&((m.from===role&&m.to===(role==="Applicant"?"Administrator":"Applicant"))||(m.to===role&&m.from===(role==="Applicant"?"Administrator":"Applicant"))));
@@ -475,7 +534,7 @@ function MessagesPage({ role,messages,setMessages,user,applicants }: { role: Rol
   return <div className="page-content"><div className="page-heading"><div><h1>Messages</h1><p>Secure conversations and hiring updates.</p></div></div><div className="messages-layout card">
     <div className="chat-list"><div className="chat-search"><Search size={15}/><input placeholder="Search conversations"/></div>{contacts.map((x,i)=>{const count=messages.filter(m=>m.applicantEmail===(role==="Applicant"?user.email:x.email)&&m.to===role).length;return <button className={selected===i?"selected":""} key={x.email} onClick={()=>setSelected(i)}><div className="avatar">{x.avatar?<img src={x.avatar} alt={x.name}/>:x.name.split(" ").map(y=>y[0]).join("").slice(0,2)}</div><span><b>{x.name}</b><small>{messages.filter(m=>m.applicantEmail===(role==="Applicant"?user.email:x.email)).at(-1)?.text||"Start a secure conversation"}</small></span>{count>0&&<i>{count}</i>}</button>})}</div>
     {contact?<div className="conversation"><div className="conversation-head"><div className="avatar">{contact.avatar?<img src={contact.avatar} alt={contact.name}/>:contact.name.split(" ").map(x=>x[0]).join("").slice(0,2)}</div><span><b>{contact.name}</b><small>{role==="Applicant"?"School recruitment administrator":contact.email}</small></span></div>
-      <div className="messages">{thread.map(m=><div className={`message-line ${m.from===role?"mine":"theirs"}`} key={m.id}><div className="message-avatar">{m.from===role&&user.avatar?<img src={user.avatar} alt={user.name}/>:m.from.slice(0,1)}</div><div className={`bubble ${m.from===role?"mine":"theirs"}`}>{m.text}<small>{m.time}</small></div></div>)}{!thread.length&&<div className="empty-thread">Start a secure conversation with {contact.name}.</div>}</div>
+      <div className="messages">{thread.map(m=>{const avatar=m.from==="Administrator"?logoResume.src:m.from===role?user.avatar:contact.avatar;return <div className={`message-line ${m.from===role?"mine":"theirs"}`} key={m.id}><div className="message-avatar">{avatar?<img src={avatar} alt={m.from==="Administrator"?"CareerBridge AI":contact.name}/>:m.from.slice(0,1)}</div><div className={`bubble ${m.from===role?"mine":"theirs"}`}>{m.text}<small>{m.time}</small></div></div>})}{!thread.length&&<div className="empty-thread">Start a secure conversation with {contact.name}.</div>}</div>
       <form className="message-box" onSubmit={e=>{e.preventDefault();if(draft.trim()&&applicantEmail){setMessages([...messages,{id:Date.now(),from:role,to:target,text:draft,time:"Just now",applicantEmail}]);setDraft("");}}}><button type="button"><Plus size={18}/></button><input value={draft} onChange={e=>setDraft(e.target.value)} placeholder={`Message ${contact.name}...`}/><button className="send" aria-label="Send"><Send size={17}/></button></form>
     </div>:<div className="conversation empty-thread">No applicants are available to message yet.</div>}</div></div>;
 }
@@ -522,15 +581,16 @@ function AIInsightsPage({ notify,priorityNames,setPriorityNames }: { notify:(s:s
 
 function LiveAIInsightsPage({items,notify,priorityNames,setPriorityNames}:{items:SubmittedApplication[];notify:(s:string)=>void;priorityNames:string[];setPriorityNames:React.Dispatch<React.SetStateAction<string[]>>}) {
   const [selected,setSelected]=useState<SubmittedApplication|null>(null);const [running,setRunning]=useState(false);
+  const [liveInsight,setLiveInsight]=useState<{summary?:string;missingSkills?:string[];interviewSuggestions?:string[]}|null>(null);
   const ranked=[...items].sort((a,b)=>b.score-a.score);
-  const strong=items.filter(item=>item.score>=80&&(item.skillScore??item.score)>=80);
+  const strong=items.filter(isQualifiedCandidate);
   const skillCounts=new Map<string,number>();items.forEach(item=>item.skills?.forEach(skill=>skillCounts.set(skill,(skillCounts.get(skill)||0)+1)));
   const topSkills=[...skillCounts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
-  const run=async()=>{if(!items.length){notify("Upload applicant resumes before running AI insights.");return}setRunning(true);try{const response=await fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({resumeText:items.map(item=>item.extractedText).filter(Boolean).join("\n\n"),jobDescription:items.map(item=>`${item.job}: ${item.score}% match`).join("\n")})});if(!response.ok)throw new Error();notify("AI insights refreshed from current applications.")}catch{notify("Unable to refresh AI insights.")}finally{setRunning(false)}};
+  const run=async()=>{if(!items.length){notify("Upload applicant resumes before running AI insights.");return}setRunning(true);try{const response=await fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({resumeText:items.map(item=>item.extractedText).filter(Boolean).join("\n\n").slice(0,30000),jobDescription:items.map(item=>`${item.job}: overall ${item.score}%, skills ${item.skillScore??item.score}%, qualifications ${item.qualificationScore??item.score}%`).join("\n")})});const insight=await response.json();if(!response.ok)throw new Error(insight.error);setLiveInsight({summary:String(insight.summary||""),missingSkills:Array.isArray(insight.missingSkills)?insight.missingSkills.map(String):[],interviewSuggestions:Array.isArray(insight.interviewSuggestions)?insight.interviewSuggestions.map(String):[]});notify("AI insights refreshed from current applications.")}catch{notify("Unable to refresh AI insights.")}finally{setRunning(false)}};
   const exportReport=()=>{if(!items.length){notify("There is no applicant data to export.");return}downloadExcel("careerbridge-ai-insights.xls",["Applicant","Email","Job","Overall Score","Skill Score","Status"],ranked.map(item=>[item.name,item.email,item.job,`${item.score}%`,`${item.skillScore??item.score}%`,item.status]));notify("AI insights Excel report exported")};
   return <div className="page-content"><div className="page-heading"><div><div className="eyebrow"><WandSparkles size={14}/> Applicant intelligence</div><h1>AI insights</h1><p>Calculated only from resumes uploaded during this test.</p></div><button className="primary" onClick={run} disabled={running}><Sparkles size={16}/>{running?"Analyzing…":"Run live analysis"}</button></div>
     <div className="insight-kpis"><Metric label="Profiles analyzed" value={String(items.length)} note="Actual applications" icon={FileSearch} tint="#eef4ff"/><Metric label="Strong matches" value={String(strong.length)} note="80% and above" icon={CheckCircle2} tint="#eef4ff"/><Metric label="Unique skills" value={String(skillCounts.size)} note="Extracted from resumes" icon={Zap} tint="#eef4ff"/><Metric label="Priority review" value={String(priorityNames.length)} note="Selected by Admin" icon={ShieldCheck} tint="#eef4ff"/></div>
-    {!items.length?<section className="card panel empty-ai-state"><BrainCircuit/><h2>No AI insight data yet</h2><p>Create a job posting, register an applicant, and upload a resume. Real Groq scores and extracted skills will appear here.</p></section>:<><div className="ai-dashboard-grid"><section className="card panel"><div className="panel-title"><div><h2>Extracted skill frequency</h2><p>Based on current uploaded resumes</p></div></div>{topSkills.map(([skill,count])=><div className="skill-insight" key={skill}><div><b>{skill}</b><span>{count} applicant{count===1?"":"s"}</span></div><div><i style={{width:`${Math.round(count/items.length*100)}%`}}/></div><strong>{Math.round(count/items.length*100)}%</strong></div>)}</section><section className="card panel"><div className="panel-title"><div><h2>Current recruitment data</h2><p>No generated sample recommendations</p></div><button className="text-button" onClick={exportReport}><Download size={14}/> Export</button></div><div className="live-data-summary"><span><b>{items.length}</b> Applications</span><span><b>{new Set(items.map(item=>item.job)).size}</b> Matched jobs</span><span><b>{items.filter(item=>item.reviewed).length}</b> Reviewed</span></div></section></div><section className="card panel explain-table"><div className="panel-title"><div><h2>AI-ranked applicants</h2><p>Scores returned from each applicant’s real resume analysis</p></div></div>{ranked.map(item=><div className="explain-row" key={item.id}><div className="avatar">{item.applicantAvatar?<img src={item.applicantAvatar} alt={item.name}/>:item.name.split(" ").map(x=>x[0]).join("").slice(0,2)}</div><div><b>{item.name}</b><span>{item.job}</span></div><ScoreRing score={item.score} small/><div className="factor"><span>Measured factors</span><div><i>Skills {item.skillScore??item.score}%</i><i>Qualifications {item.qualificationScore??item.score}%</i></div></div><button className="secondary" onClick={()=>setSelected(item)}>Explain score</button></div>)}</section></>}
+    {!items.length?<section className="card panel empty-ai-state"><BrainCircuit/><h2>No AI insight data yet</h2><p>Create a job posting, register an applicant, and upload a resume. Real Groq scores and extracted skills will appear here.</p></section>:<><div className="ai-dashboard-grid"><section className="card panel"><div className="panel-title"><div><h2>Extracted skill frequency</h2><p>Based on current uploaded resumes</p></div></div>{topSkills.map(([skill,count])=><div className="skill-insight" key={skill}><div><b>{skill}</b><span>{count} applicant{count===1?"":"s"}</span></div><div><i style={{width:`${Math.round(count/items.length*100)}%`}}/></div><strong>{Math.round(count/items.length*100)}%</strong></div>)}{!topSkills.length&&<div className="overview-empty"><FileSearch/><b>No extracted skills stored</b><span>Re-upload the resume to run the updated skill tracker.</span></div>}</section><section className="card panel"><div className="panel-title"><div><h2>Live AI analytics</h2><p>Generated from current recruitment data</p></div><button className="text-button" onClick={exportReport}><Download size={14}/> Export</button></div><div className="live-data-summary"><span><b>{items.length}</b> Applications</span><span><b>{new Set(items.map(item=>item.job)).size}</b> Matched jobs</span><span><b>{items.filter(item=>item.reviewed).length}</b> Reviewed</span></div>{liveInsight&&<div className="live-ai-result"><div className="drawer-ai"><Sparkles/><div><b>Groq recruitment summary</b><p>{liveInsight.summary}</p></div></div>{liveInsight.missingSkills?.length?<div className="parsed-skills">{liveInsight.missingSkills.map(skill=><span key={skill}>Gap: {skill}</span>)}</div>:null}{liveInsight.interviewSuggestions?.length?<ul>{liveInsight.interviewSuggestions.map(suggestion=><li key={suggestion}>{suggestion}</li>)}</ul>:null}</div>}</section></div><section className="card panel explain-table"><div className="panel-title"><div><h2>AI-ranked applicants</h2><p>Scores returned from each applicant’s real resume analysis</p></div></div>{ranked.map(item=><div className="explain-row" key={item.id}><div className="avatar">{item.applicantAvatar?<img src={item.applicantAvatar} alt={item.name}/>:item.name.split(" ").map(x=>x[0]).join("").slice(0,2)}</div><div><b>{item.name}</b><span>{item.job}</span></div><ScoreRing score={item.score} small/><div className="factor"><span>Measured factors</span><div><i>Skills {item.skillScore??item.score}%</i><i>Qualifications {item.qualificationScore??item.score}%</i></div></div><button className="secondary" onClick={()=>setSelected(item)}>Explain score</button></div>)}</section></>}
     {selected&&<div className="modal-backdrop" onClick={()=>setSelected(null)}><div className="insight-modal card" onClick={event=>event.stopPropagation()}><div className="modal-head"><div><h2>AI score details</h2><p>{selected.name} · {selected.job}</p></div><button onClick={()=>setSelected(null)}><X/></button></div><div className="explanation-hero"><ScoreRing score={selected.score}/><div><b>{selected.score}% overall match</b><p>{selected.summary||"The score was calculated from resume evidence and the job requirements."}</p></div></div>{[["Skills",selected.skillScore??selected.score],["Qualifications",selected.qualificationScore??selected.score]].map(([label,value])=><div className="explanation-factor" key={label}><div><b>{label}</b><span>{value}%</span></div><div><i style={{width:`${Number(value)}%`}}/></div></div>)}<div className="parsed-skills">{selected.skills?.map(skill=><span key={skill}>{skill}</span>)}</div><button className="primary full" onClick={()=>{if(!priorityNames.includes(selected.name))setPriorityNames([...priorityNames,selected.name]);notify(`${selected.name} added to priority review`);setSelected(null)}}>Add to priority review</button></div></div>}
   </div>
 }
@@ -567,7 +627,10 @@ function JobPostingsPage({ role,notify,records,setRecords,setSubmitted,user }:{r
       try{analysis=JSON.parse(responseText) as Record<string,unknown>}catch{throw new Error("The resume service returned an invalid response. Please try again.")}
       if(!response.ok)throw new Error(String(analysis.error||"Unable to analyze this resume."));
       const ranked=(Array.isArray(analysis.jobMatches)?analysis.jobMatches:[]).sort((a:{score:number},b:{score:number})=>Number(b.score)-Number(a.score));
-      const qualified=ranked.filter((match:{score:number;skillScore?:number})=>Number(match.score)>=80&&Number(match.skillScore??match.score)>=80);
+      const qualified=ranked.filter((match:{score:number;skillScore?:number;qualificationScore?:number})=>{
+        const score=Number(match.score||0);const skills=Number(match.skillScore??score);const qualifications=Number(match.qualificationScore??score);
+        return score>=70&&skills>=70||skills>=80||qualifications>=80;
+      });
       const routedMatches=qualified.length?qualified:ranked.slice(0,1);
       if(!routedMatches.length)throw new Error("The AI could not rank the available jobs. Please try the analysis again.");
       const resumeUrl=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error("Unable to preserve the uploaded resume."));reader.readAsDataURL(resume)});
@@ -581,8 +644,9 @@ function JobPostingsPage({ role,notify,records,setRecords,setSubmitted,user }:{r
         if(!job)return [];
         const score=Math.min(100,Math.max(0,Number(match.score||0)));
         const skillScore=Math.min(100,Math.max(0,Number(match.skillScore??score)));
-        const shortlisted=score>=80&&skillScore>=80;
-        return [{id:baseId+index,name:String(f.get("name")),email:String(f.get("email")),applicantAvatar:user.avatar,job:job.title,office:job.office,score,skillScore,qualificationScore:Number(match.qualificationScore||score),skills:Array.isArray(analysis.skills)?analysis.skills.map(String):[],status:shortlisted?"AI shortlisted":"Under review",resumeUrl,resumeName:resume.name,resumeType:resume.type,extractedText:String(analysis.extractedText||""),summary:String(analysis.summary||""),education:Array.isArray(analysis.education)?analysis.education.map(String):[],experience:Array.isArray(analysis.experience)?analysis.experience.map(String):[],qualifications:Array.isArray(analysis.qualifications)?analysis.qualifications.map(String):[],missingSkills:Array.isArray(match.missingSkills)?match.missingSkills.map(String):Array.isArray(analysis.missingSkills)?analysis.missingSkills.map(String):[],interviewSuggestions:Array.isArray(analysis.interviewSuggestions)?analysis.interviewSuggestions.map(String):[]}];
+        const qualificationScore=Math.min(100,Math.max(0,Number(match.qualificationScore??score)));
+        const shortlisted=score>=70&&skillScore>=70||skillScore>=80||qualificationScore>=80;
+        return [{id:baseId+index,name:String(f.get("name")),email:String(f.get("email")),applicantAvatar:user.avatar,job:job.title,office:job.office,score,skillScore,qualificationScore,skills:Array.isArray(analysis.skills)?analysis.skills.map(String):[],status:shortlisted?"AI shortlisted":"Under review",resumeUrl,resumeName:resume.name,resumeType:resume.type,extractedText:String(analysis.extractedText||""),summary:String(analysis.summary||""),education:Array.isArray(analysis.education)?analysis.education.map(String):[],experience:Array.isArray(analysis.experience)?analysis.experience.map(String):[],qualifications:Array.isArray(analysis.qualifications)?analysis.qualifications.map(String):[],missingSkills:Array.isArray(match.missingSkills)?match.missingSkills.map(String):Array.isArray(analysis.missingSkills)?analysis.missingSkills.map(String):[],interviewSuggestions:Array.isArray(analysis.interviewSuggestions)?analysis.interviewSuggestions.map(String):[]}];
       });
       if(!routedApplications.length)throw new Error("AI results did not match an available job title.");
       setSubmitted(s=>[...routedApplications,...s]);
@@ -594,48 +658,60 @@ function JobPostingsPage({ role,notify,records,setRecords,setSubmitted,user }:{r
   const blank:JobRecord={id:0,title:"",office:"Admin / HR",type:"Full-time",location:"Main Campus",description:"",requirements:"",status:"Open",applicants:0,match:0};
   return <div className="page-content recruit-page"><div className="page-heading"><div><div className="eyebrow"><BriefcaseBusiness size={14}/> Recruitment opportunities</div><h1>{role==="Applicant"?"Available school jobs":"Job postings"}</h1><p>{role==="Applicant"?"Upload one resume and Groq will match you to the most relevant open position.":"Create, edit, open, or close positions visible to applicants."}</p></div>{role==="Applicant"?<button className="primary" onClick={()=>setApplying({id:-1,title:"Resume job matching",office:"Automatic office routing",type:"AI matching",location:"All school campuses",description:"Your resume will be compared with every open school position.",requirements:"Groq will extract skills, experience, education, and qualifications before selecting the strongest job match.",status:"Open",applicants:0,match:0})}><Upload size={17}/> Upload resume</button>:<button className="dark-button" onClick={()=>setEditing(blank)}><Plus size={17}/> Create job posting</button>}</div>
     <div className="recruit-toolbar"><div className="top-search"><Search size={17}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search job title..."/></div>{role!=="Applicant"&&<div className="pill-tabs">{(["All","Open","Closed"] as const).map(x=><button className={status===x?"active":""} onClick={()=>setStatus(x)} key={x}>{x}</button>)}</div>}<span>{visible.length} positions</span></div>
-    <div className="posting-grid">{visible.map((job,i)=><article className={`posting-card ${job.status.toLowerCase()}`} key={job.id}><div className="posting-top"><div className="posting-logo" style={{background:["#e9defa","#def0c8","#f8dfd9","#e1e1fb"][i%4]}}><BriefcaseBusiness size={21}/></div><span className={`posting-state ${job.status.toLowerCase()}`}>{job.status}</span></div><h2>{job.title}</h2><p className="posting-office">{job.office} · {job.location}</p><p>{job.description}</p><div className="posting-tags"><span>{job.type}</span><span>{job.applicants} applicants</span></div>{role!=="Applicant"&&<div className="posting-actions"><button className="edit-button" onClick={()=>setEditing({...job})}><Edit3 size={14}/> Edit</button><button className={job.status==="Open"?"close-button":"open-button"} onClick={()=>{setRecords(records.map(j=>j.id===job.id?{...j,status:j.status==="Open"?"Closed":"Open"}:j));notify(`${job.title} is now ${job.status==="Open"?"closed and hidden from applicants":"open and visible to applicants"}`)}}>{job.status==="Open"?<EyeOff size={14}/>:<Eye size={14}/>} {job.status==="Open"?"Close":"Open"}</button></div>}</article>)}</div>
+    <div className="posting-grid">{visible.map((job,i)=><article className={`posting-card ${job.status.toLowerCase()}`} key={job.id}><div className="posting-top"><div className="posting-logo" style={{background:["#e9defa","#def0c8","#f8dfd9","#e1e1fb"][i%4]}}><BriefcaseBusiness size={21}/></div><span className={`posting-state ${job.status.toLowerCase()}`}>{job.status}</span></div><h2>{job.title}</h2><p className="posting-office">{job.office} · {job.location}</p><p>{job.description}</p><div className="posting-tags"><span>{job.type}</span>{role!=="Applicant"&&<span>{job.applicants} applicants</span>}</div>{role!=="Applicant"&&<div className="posting-actions"><button className="edit-button" onClick={()=>setEditing({...job})}><Edit3 size={14}/> Edit</button><button className={job.status==="Open"?"close-button":"open-button"} onClick={()=>{setRecords(records.map(j=>j.id===job.id?{...j,status:j.status==="Open"?"Closed":"Open"}:j));notify(`${job.title} is now ${job.status==="Open"?"closed and hidden from applicants":"open and visible to applicants"}`)}}>{job.status==="Open"?<EyeOff size={14}/>:<Eye size={14}/>} {job.status==="Open"?"Close":"Open"}</button></div>}</article>)}</div>
     {!visible.length&&<div className="empty-jobs"><BriefcaseBusiness/><h3>No positions found</h3><p>Try another search or status filter.</p></div>}
     {editing&&<div className="modal-backdrop" onClick={()=>setEditing(null)}><form className="modal job-modal card" onClick={e=>e.stopPropagation()} onSubmit={save}><div className="modal-head"><div><h2>{editing.id?"Edit job posting":"Create job posting"}</h2><p>Open positions become immediately visible in the applicant portal.</p></div><button type="button" onClick={()=>setEditing(null)}><X/></button></div><div className="form-two"><label>Position title<input required value={editing.title} onChange={e=>setEditing({...editing,title:e.target.value})} placeholder="e.g. School Registrar"/></label><label>Employment type<select value={editing.type} onChange={e=>setEditing({...editing,type:e.target.value})}><option>Full-time</option><option>Part-time</option><option>Contract</option><option>Temporary</option></select></label><label>Campus location<input value={editing.location} onChange={e=>setEditing({...editing,location:e.target.value})}/></label></div><label>Description<textarea required value={editing.description} onChange={e=>setEditing({...editing,description:e.target.value})} placeholder="Position responsibilities and summary"/></label><label>Qualifications and required skills<textarea required value={editing.requirements} onChange={e=>setEditing({...editing,requirements:e.target.value})} placeholder="Education, experience, skills, and certifications"/></label><label className="status-toggle">Posting status<select value={editing.status} onChange={e=>setEditing({...editing,status:e.target.value as "Open"|"Closed"})}><option>Open</option><option>Closed</option></select><small>{editing.status==="Open"?"Applicants can see and apply to this job.":"This job is hidden from applicants."}</small></label><div className="modal-actions"><button type="button" className="secondary" onClick={()=>setEditing(null)}>Cancel</button><button className="dark-button">{editing.status==="Open"?"Save and publish":"Save as closed"}</button></div></form></div>}
     {applying&&<div className="modal-backdrop" onClick={()=>{if(!matching){setApplying(null);setResumeFile(null)}}}><form className="modal job-modal card resume-upload-modal" onClick={e=>e.stopPropagation()} onSubmit={analyzeAndApply}><div className="modal-head"><div><div className="eyebrow"><Sparkles size={13}/> Secure AI resume matching</div><h2>Upload your resume</h2><p>CareerBridge will compare your qualifications with every open position.</p></div><button type="button" disabled={matching} onClick={()=>{setApplying(null);setResumeFile(null)}}><X/></button></div><div className="form-two"><label><span>Full name</span><div className="field-with-icon"><UserRound size={16}/><input name="name" required defaultValue={user.name}/></div></label><label><span>Email address</span><div className="field-with-icon"><Mail size={16}/><input name="email" type="email" required defaultValue={user.email}/></div></label></div><label className={`resume-drop-field ${resumeFile?"attached":""}`}><input name="resume" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required onChange={event=>{const file=event.target.files?.[0]||null;if(file&&file.size>10*1024*1024){notify("Resume must be 10 MB or smaller.");event.target.value="";setResumeFile(null);return}setResumeFile(file)}}/><div className="resume-drop-icon">{resumeFile?<CheckCircle2 size={23}/>:<Upload size={23}/>}</div><b>{resumeFile?"Resume attached":"Select your resume"}</b>{resumeFile?<><span className="attached-resume-name">{resumeFile.name}</span><small>{resumeFile.name.toLowerCase().endsWith(".pdf")?"PDF document":"Word document"} · {(resumeFile.size/1024/1024).toFixed(2)} MB · Click to replace</small></>:<><span>PDF or DOCX · Maximum 10 MB</span><small>Skills, education, experience, and qualifications are extracted securely.</small></>}</label><label className="message-field"><span>Message to Admin/HR <small>Optional</small></span><textarea name="note" placeholder="Share a short introduction or any relevant information."/></label><div className="privacy-note"><ShieldCheck size={16}/><span>Your original file remains private and is shown only to authorized Admin/HR reviewers.</span></div><div className="modal-actions"><button type="button" className="secondary" disabled={matching} onClick={()=>{setApplying(null);setResumeFile(null)}}>Cancel</button><button className="dark-button upload-analyze-button" disabled={matching||!resumeFile}><Sparkles size={16}/>{matching?"Parsing and matching…":"Analyze and upload"}</button></div>{matching&&<div className="resume-analysis-progress"><div className="progress-orbit" style={{"--progress":analysisProgress} as React.CSSProperties}><span>{analysisProgress}%</span></div><h3>{analysisProgress<30?"Reading your resume":analysisProgress<65?"Extracting skills and qualifications":analysisProgress<95?"Matching open positions":"Resume analysis complete"}</h3><p>{analysisProgress<95?"CareerBridge AI is securely processing your document.":"Your resume is ready to be routed."}</p><div><i style={{width:`${analysisProgress}%`}}/></div><small>Keep this window open until the upload finishes.</small></div>}</form></div>}
   </div>;
 }
 
-function ApplicationManagement({role,items,setItems,notify,user}:{role:Role;items:SubmittedApplication[];setItems:React.Dispatch<React.SetStateAction<SubmittedApplication[]>>;notify:(s:string)=>void;user:User}) {
+function ApplicationManagement({role,items,setItems,notify,user,jobs}:{role:Role;items:SubmittedApplication[];setItems:React.Dispatch<React.SetStateAction<SubmittedApplication[]>>;notify:(s:string)=>void;user:User;jobs:JobRecord[]}) {
   const [jobFolder,setJobFolder]=useState<string|null>(null);
   const baseVisible=role==="Applicant"?items.filter(x=>x.email.toLowerCase()===user.email.toLowerCase()):items;
   const visible=jobFolder?baseVisible.filter(x=>x.job===jobFolder):baseVisible;
   const [reviewing,setReviewing]=useState<SubmittedApplication|null>(null); const [scheduling,setScheduling]=useState<SubmittedApplication|null>(null);
-  const jobNames=[...new Set(baseVisible.map(x=>x.job))];
-  return <div className="page-content"><div className="page-heading"><div>{jobFolder&&<button className="folder-back" onClick={()=>setJobFolder(null)}><ArrowLeft size={15}/> All job folders</button>}<div className="eyebrow"><FileText size={14}/> Application workflow</div><h1>{role==="Applicant"?"My applications":jobFolder}</h1><p>{role==="Applicant"?"Track reviews, interviews, and hiring updates.":jobFolder?`Review applications submitted for ${jobFolder}.`:"Applications organized by job posting."}</p></div></div>{role!=="Applicant"&&!jobFolder?<div className="job-folder-grid">{jobNames.map((job,i)=>{const group=baseVisible.filter(x=>x.job===job);const top=Math.max(...group.map(x=>x.score));return <button className={`job-folder-card folder-tone-${i%4}`} key={job} onClick={()=>setJobFolder(job)}><div className="folder-shape"><FolderOpen size={25}/><span>{group.length}</span></div><h3>{job}</h3><p>{group[0]?.office}</p><div><span><b>{group.length}</b> Applications</span><span><b>{top}%</b> Top match</span></div><footer>Open applications <ChevronRight size={15}/></footer></button>})}</div>:<section className="card panel managed-apps">{visible.map(a=><div className="managed-row" key={a.id}><div className="avatar">{a.name.split(" ").map(x=>x[0]).join("")}</div><div><b>{a.name}</b><span>{a.job} · {a.office}</span>{a.interviewDate&&<small className="interview-detail"><CalendarDays size={11}/>{a.interviewDate} at {a.interviewTime} · {a.interviewMethod}</small>}</div><span className={`status ${a.status.toLowerCase().replaceAll(" ","-")}`}>{a.status}</span><b className="managed-score">{a.score}% match</b>{role!=="Applicant"&&<div className="review-actions"><button className={a.reviewed?"completed":""} onClick={()=>setReviewing(a)}>{a.reviewed?<Check size={14}/>:<FileSearch size={14}/>} {a.reviewed?"Reviewed":"Review resume"}</button><button className={a.status==="Interview scheduled"?"scheduled":""} onClick={()=>setScheduling(a)}><CalendarDays size={14}/> {a.status==="Interview scheduled"?"Reschedule":"Schedule interview"}</button></div>}</div>)}{!visible.length&&<div className="empty-jobs"><FileText/><h3>No applications yet</h3><p>Submitted applications will appear here.</p></div>}</section>}
+  const jobNames=role==="Applicant"?[...new Set(baseVisible.map(x=>x.job))]:[...new Set([...jobs.map(job=>job.title),...baseVisible.map(x=>x.job)])];
+  return <div className="page-content"><div className="page-heading"><div>{jobFolder&&<button className="folder-back" onClick={()=>setJobFolder(null)}><ArrowLeft size={15}/> All application envelopes</button>}<div className="eyebrow"><FileText size={14}/> Application workflow</div><h1>{role==="Applicant"?"My applications":jobFolder||"Applications by job"}</h1><p>{role==="Applicant"?"Track reviews, interviews, and hiring updates.":jobFolder?`Review applications submitted for ${jobFolder}.`:"Point at an envelope to preview it, then open the job’s applications."}</p></div></div>{role!=="Applicant"&&!jobFolder?<>{jobNames.length?<div className="job-envelope-grid">{jobNames.map((job,i)=>{const group=baseVisible.filter(x=>x.job===job);const record=jobs.find(item=>item.title===job);return <JobEnvelope key={job} title={job} office={group[0]?.office||record?.office} count={group.length} score={group.length?Math.max(...group.map(x=>x.score)):0} label="Applications" index={i} onOpen={()=>setJobFolder(job)}/>})}</div>:<section className="card panel empty-ai-state"><FileText/><h2>No job postings yet</h2><p>Create a job posting to generate its application envelope automatically.</p></section>}</>:<section className="card panel managed-apps">{visible.map(a=><div className="managed-row" key={a.id}><div className="avatar">{a.applicantAvatar?<img src={a.applicantAvatar} alt={a.name}/>:<UserRound size={17}/>}</div><div><b>{a.name}</b><span>{a.job} · {a.office}</span>{a.interviewDate&&<small className="interview-detail"><CalendarDays size={11}/>{a.interviewDate} at {a.interviewTime} · {a.interviewMethod}</small>}</div><span className={`status ${a.status.toLowerCase().replaceAll(" ","-")}`}>{a.status}</span><b className="managed-score">{a.score}% match</b>{role!=="Applicant"&&<div className="review-actions"><button className={a.reviewed?"completed":""} onClick={()=>setReviewing(a)}>{a.reviewed?<Check size={14}/>:<FileSearch size={14}/>} {a.reviewed?"Reviewed":"Review resume"}</button><button className={a.status==="Interview scheduled"?"scheduled":""} onClick={()=>setScheduling(a)}><CalendarDays size={14}/> {a.status==="Interview scheduled"?"Reschedule":"Schedule interview"}</button></div>}</div>)}{!visible.length&&<div className="empty-jobs"><FileText/><h3>No applications yet</h3><p>This job envelope is ready and will update after an applicant is matched.</p></div>}</section>}
   {reviewing&&<div className="modal-backdrop" onClick={()=>setReviewing(null)}><div className="review-modal card actual-file-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><h2>Resume review</h2><p>{reviewing.name} · {reviewing.job}</p></div><button onClick={()=>setReviewing(null)}><X/></button></div><div className="actual-file-grid"><ResumeDocument application={reviewing}/><aside className="candidate-analysis"><div className="analysis-score"><ScoreRing score={reviewing.score}/><div><b>AI match score</b><span>{reviewing.skillScore??reviewing.score}% skills alignment</span></div></div><h3>AI scorer</h3><p>{reviewing.summary||"Analysis is unavailable for this demonstration record."}</p>{reviewing.skills?.length?<div className="parsed-skills">{reviewing.skills.map(skill=><span key={skill}>{skill}</span>)}</div>:null}{[["Skills",reviewing.skillScore??reviewing.score],["Qualifications",reviewing.qualificationScore??reviewing.score]].map(([label,value])=><div className="analysis-factor" key={label}><span>{label}<b>{value}%</b></span><div><i style={{width:`${Number(value)}%`}}/></div></div>)}</aside></div><div className="modal-actions"><button className={`review-confirm ${reviewing.reviewed?"done":""}`} onClick={()=>{const next=!reviewing.reviewed;setItems(items.map(x=>x.id===reviewing.id?{...x,reviewed:next,status:x.status==="Interview scheduled"?x.status:next?"Reviewed":"Under review"}:x));notify(`${reviewing.name} marked as ${next?"reviewed":"unreviewed"}; applicant notified`);setReviewing(null)}}>{reviewing.reviewed?<><X size={15}/>Unreview</>:<><CheckCircle2 size={15}/>Mark as reviewed</>}</button></div></div></div>}
-  {scheduling&&<div className="modal-backdrop" onClick={()=>setScheduling(null)}><form className="modal interview-modal card" onClick={e=>e.stopPropagation()} onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);setItems(items.map(x=>x.id===scheduling.id?{...x,status:"Interview scheduled",interviewDate:String(f.get("date")),interviewTime:String(f.get("time")),interviewMethod:String(f.get("method")),interviewLocation:String(f.get("location"))}:x));notify(`Interview scheduled for ${scheduling.name}; applicant notified`);setScheduling(null)}}><div className="modal-head"><div><h2>Schedule interview</h2><p>{scheduling.name} · {scheduling.job}</p></div><button type="button" onClick={()=>setScheduling(null)}><X/></button></div><div className="calendar-banner"><CalendarDays/><div><b>Choose the interview schedule</b><span>The applicant will receive these details immediately.</span></div></div><div className="form-two"><label>Interview date<input name="date" type="date" required defaultValue={scheduling.interviewDate}/></label><label>Start time<input name="time" type="time" required defaultValue={scheduling.interviewTime}/></label></div><label>Interview method<select name="method" required defaultValue={scheduling.interviewMethod||"Google Meet"}><option>Google Meet</option><option>Zoom</option><option>Onsite</option></select></label><label>Meeting link or onsite location<input name="location" required defaultValue={scheduling.interviewLocation} placeholder="Meeting URL, room, or campus address"/></label><label>Interview notes<textarea name="notes" placeholder="Preparation instructions or required documents"/></label><div className="modal-actions"><button type="button" className="secondary" onClick={()=>setScheduling(null)}>Cancel</button><button className="primary"><CalendarDays size={15}/> Confirm schedule</button></div></form></div>}
+  {scheduling&&<div className="modal-backdrop" onClick={()=>setScheduling(null)}><form className="modal interview-modal card" onClick={e=>e.stopPropagation()} onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);setItems(items.map(x=>x.id===scheduling.id?{...x,status:"Interview scheduled",interviewDate:String(f.get("date")),interviewTime:String(f.get("time")),interviewMethod:String(f.get("method")),interviewLocation:String(f.get("location")),interviewConfirmed:false}:x));notify(`Interview scheduled for ${scheduling.name}; applicant notified`);setScheduling(null)}}><div className="modal-head"><div><h2>Schedule interview</h2><p>{scheduling.name} · {scheduling.job}</p></div><button type="button" onClick={()=>setScheduling(null)}><X/></button></div><div className="calendar-banner"><CalendarDays/><div><b>Choose the interview schedule</b><span>The applicant will receive these details immediately.</span></div></div><div className="form-two"><label>Interview date<input name="date" type="date" required defaultValue={scheduling.interviewDate}/></label><label>Start time<input name="time" type="time" required defaultValue={scheduling.interviewTime}/></label></div><label>Interview method<select name="method" required defaultValue={scheduling.interviewMethod||"Google Meet"}><option>Google Meet</option><option>Zoom</option><option>Onsite</option></select></label><label>Meeting link or onsite location<input name="location" required defaultValue={scheduling.interviewLocation} placeholder="Meeting URL, room, or campus address"/></label><label>Interview notes<textarea name="notes" placeholder="Preparation instructions or required documents"/></label><div className="modal-actions"><button type="button" className="secondary" onClick={()=>setScheduling(null)}>Cancel</button><button className="primary"><CalendarDays size={15}/> Confirm schedule</button></div></form></div>}
   </div>
 }
 
-function CandidatesPage({items,notify,priorityNames}:{items:SubmittedApplication[];notify:(s:string)=>void;priorityNames:string[]}) {
-  const all=items.filter(x=>x.score>=80&&(x.skillScore??x.score)>=80).map(x=>priorityNames.includes(x.name)?{...x,status:"Priority",reviewed:false}:x).sort((a,b)=>(Number(priorityNames.includes(b.name))-Number(priorityNames.includes(a.name)))||b.score-a.score);
+function JobEnvelope({title,office,count,score,label,index,onOpen}:{title:string;office?:string;count:number;score:number;label:string;index:number;onOpen:()=>void}) {
+  return <button className={`job-envelope-card job-envelope-tone-${index%4}`} onClick={onOpen} aria-label={`Open ${title} ${label}`}>
+    <div className="job-envelope-shadow"/>
+    <div className="job-envelope-back"/>
+    <div className="job-envelope-letter"><div className="job-envelope-letter-head"><BriefcaseBusiness size={18}/><Badge variant="secondary">{count}</Badge></div><h3>{title}</h3><p>{office||"Admin / HR"}</p><div><span><b>{count}</b> {label}</span><span><b>{score?`${score}%`:"—"}</b> {label==="Applications"?"Top match":"Best match"}</span></div><footer>Open {label.toLowerCase()} <ChevronRight size={15}/></footer></div>
+    <div className="job-envelope-flap"/>
+    <div className="job-envelope-pocket"/>
+    <div className="job-envelope-closed-label"><BriefcaseBusiness size={17}/><span><b>{title}</b><small>{count} {label.toLowerCase()}</small></span></div>
+  </button>;
+}
+
+function CandidatesPage({items,notify,priorityNames,jobs}:{items:SubmittedApplication[];notify:(s:string)=>void;priorityNames:string[];jobs:JobRecord[]}) {
+  const all=items.filter(isQualifiedCandidate).map(x=>priorityNames.includes(x.name)?{...x,status:"Priority",reviewed:false}:x).sort((a,b)=>(Number(priorityNames.includes(b.name))-Number(priorityNames.includes(a.name)))||b.score-a.score);
   const [min,setMin]=useState(0); const [selected,setSelected]=useState<typeof all[0]|null>(null); const [jobFolder,setJobFolder]=useState<string|null>(null);
-  const shown=all.filter(x=>x.score>=min&&(!jobFolder||x.job===jobFolder)); const jobNames=[...new Set(all.map(x=>x.job))];
+  const shown=all.filter(x=>x.score>=min&&(!jobFolder||x.job===jobFolder)); const jobNames=[...new Set([...jobs.map(job=>job.title),...all.map(x=>x.job)])];
   const exportCsv=()=>{const csv=["Name,Email,Position,Office,Score,Status",...shown.map(x=>`"${x.name}","${x.email}","${x.job}","${x.office}",${x.score},"${x.status}"`)].join("\n");const url=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));const a=document.createElement("a");a.href=url;a.download="careerbridge-candidates.csv";a.click();URL.revokeObjectURL(url);notify("Candidate report exported")};
-  return <div className="page-content"><div className="page-heading"><div>{jobFolder&&<button className="folder-back" onClick={()=>setJobFolder(null)}><ArrowLeft size={15}/> All candidate folders</button>}<div className="eyebrow"><UsersRound size={14}/> Talent ranking</div><h1>{jobFolder||"Candidates by job"}</h1><p>{jobFolder?"Candidates ranked by best match for this position.":"Open a job folder to view its matched candidates."}</p></div>{jobFolder&&<button className="primary" onClick={exportCsv}><Download size={15}/> Export report</button>}</div>{!jobFolder?<div className="job-folder-grid">{jobNames.map((job,i)=>{const group=all.filter(x=>x.job===job);return <button className={`job-folder-card folder-tone-${i%4}`} key={job} onClick={()=>setJobFolder(job)}><div className="folder-shape"><Folder size={25}/><span>{group.length}</span></div><h3>{job}</h3><p>{group[0]?.office}</p><div><span><b>{group.length}</b> Candidates</span><span><b>{Math.max(...group.map(x=>x.score))}%</b> Best match</span></div><footer>Open candidates <ChevronRight size={15}/></footer></button>})}</div>:<><div className="toolbar card"><div><Search size={16}/><input placeholder="Search candidates..."/></div><select value={min} onChange={e=>setMin(Number(e.target.value))}><option value="0">All match scores</option><option value="80">80% and above</option><option value="90">90% and above</option></select><button onClick={exportCsv}><Download size={15}/> Export</button></div><section className="card panel candidate-report"><div className="candidate-report-head"><span>Candidate</span><span>Position</span><span>Match</span><span>Status</span><span>Action</span></div>{shown.map(x=><div className="candidate-report-row" key={`${x.id}-${x.email}`}><div><div className="avatar">{x.name.split(" ").map(y=>y[0]).join("")}</div><span><b>{x.name}</b><small>{x.email}</small></span></div><span>{x.job}<small>{x.office}</small></span><b className="blue-score">{x.score}%</b><span className={`status ${x.reviewed?"reviewed":x.status.toLowerCase()}`}>{x.reviewed?"Reviewed":x.status}</span><button className="open-candidate" onClick={()=>setSelected(x)}>Open <ChevronRight size={14}/></button></div>)}</section></>}
+  return <div className="page-content"><div className="page-heading"><div>{jobFolder&&<button className="folder-back" onClick={()=>setJobFolder(null)}><ArrowLeft size={15}/> All candidate envelopes</button>}<div className="eyebrow"><UsersRound size={14}/> Talent ranking</div><h1>{jobFolder||"Candidates by job"}</h1><p>{jobFolder?"Candidates ranked by best match for this position.":"Point at an envelope to preview it, then open the job’s candidates."}</p></div>{jobFolder&&<button className="primary" onClick={exportCsv}><Download size={15}/> Export report</button>}</div>{!jobFolder?<>{jobNames.length?<div className="job-envelope-grid">{jobNames.map((job,i)=>{const group=all.filter(x=>x.job===job);const record=jobs.find(item=>item.title===job);return <JobEnvelope key={job} title={job} office={group[0]?.office||record?.office} count={group.length} score={group.length?Math.max(...group.map(x=>x.score)):0} label="Candidates" index={i} onOpen={()=>setJobFolder(job)}/>})}</div>:<section className="card panel empty-ai-state"><UsersRound/><h2>No job postings yet</h2><p>Create a job posting to generate its candidate envelope automatically.</p></section>}</>:<><div className="toolbar card"><div><Search size={16}/><input placeholder="Search candidates..."/></div><select value={min} onChange={e=>setMin(Number(e.target.value))}><option value="0">All match scores</option><option value="80">80% and above</option><option value="90">90% and above</option></select><button onClick={exportCsv}><Download size={15}/> Export</button></div><section className="card panel candidate-report"><div className="candidate-report-head"><span>Candidate</span><span>Position</span><span>Match</span><span>Status</span><span>Action</span></div>{shown.map(x=><div className="candidate-report-row" key={`${x.id}-${x.email}`}><div><div className="avatar">{x.applicantAvatar?<img src={x.applicantAvatar} alt={x.name}/>:<UserRound size={17}/>}</div><span><b>{x.name}</b><small>{x.email}</small></span></div><span>{x.job}<small>{x.office}</small></span><b className="blue-score">{x.score}%</b><span className={`status ${x.reviewed?"reviewed":x.status.toLowerCase()}`}>{x.reviewed?"Reviewed":x.status}</span><button className="open-candidate" onClick={()=>setSelected(x)}>Open <ChevronRight size={14}/></button></div>)}{!shown.length&&<div className="overview-empty"><UsersRound/><b>No qualified candidates in this job yet</b><span>The envelope is ready and will update after AI matching.</span></div>}</section></>}
   {selected&&<div className="modal-backdrop" onClick={()=>setSelected(null)}><div className="candidate-detail card" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><h2>{selected.name}</h2><p>{selected.job} · {selected.office}</p></div><button onClick={()=>setSelected(null)}><X/></button></div><div className="candidate-detail-grid"><ResumeDocument application={selected}/><aside className="candidate-analysis"><div className="analysis-score"><ScoreRing score={selected.score}/><div><b>AI match score</b><span>Resume evidence against job requirements</span></div></div><h3>AI scorer</h3><p>{selected.summary||"Analysis is unavailable for this demonstration record."}</p>{[["Skills alignment",selected.skillScore??selected.score],["Qualifications",selected.qualificationScore??selected.score],["Overall match",selected.score]].map(([x,n])=><div className="analysis-factor" key={x}><span>{x}<b>{n}%</b></span><div><i style={{width:`${Number(n)}%`}}/></div></div>)}{selected.skills?.length?<div className="parsed-skills">{selected.skills.map(skill=><span key={skill}>{skill}</span>)}</div>:null}<div className="analysis-note"><CheckCircle2/><p>The score supports review; the original uploaded resume remains the source document.</p></div></aside></div></div></div>}
   </div>;
 }
 
-function InterviewsPage({role,items,notify,user}:{role:Role;items:SubmittedApplication[];notify:(s:string)=>void;user:User}) {
-  const [selected,setSelected]=useState<SubmittedApplication|null>(null); const [confirmed,setConfirmed]=useState<number[]>([]);
+function InterviewsPage({role,items,setItems,notify,user}:{role:Role;items:SubmittedApplication[];setItems:React.Dispatch<React.SetStateAction<SubmittedApplication[]>>;notify:(s:string)=>void;user:User}) {
+  const [selected,setSelected]=useState<SubmittedApplication|null>(null);
   const scheduled=items.filter(x=>x.status==="Interview scheduled"&&(role!=="Applicant"||x.email.toLowerCase()===user.email.toLowerCase()));
-  return <div className="page-content"><div className="page-heading"><div><div className="eyebrow"><CalendarDays size={14}/> Interview schedule</div><h1>Interviews</h1><p>{role==="Applicant"?"Review and confirm your scheduled interviews.":"View all confirmed and upcoming interviews."}</p></div></div><section className="interview-list">{scheduled.map(x=><article className="card interview-list-card" key={x.id}><div className="interview-date-tile"><b>{x.interviewDate?new Date(`${x.interviewDate}T00:00:00`).getDate():"29"}</b><span>{x.interviewDate?new Date(`${x.interviewDate}T00:00:00`).toLocaleString("en",{month:"short"}):"JUL"}</span></div><div><h3>{x.job}</h3><p>{x.name} · {x.office}</p><span><Clock3 size={13}/>{x.interviewTime||"10:30"} · {x.interviewMethod||"Google Meet"}</span></div><span className={`status ${confirmed.includes(x.id)?"reviewed":"interview-scheduled"}`}>{confirmed.includes(x.id)?"Confirmed":"Awaiting confirmation"}</span><div className="interview-card-actions">{role==="Applicant"&&!confirmed.includes(x.id)&&<button className="confirm-interview" onClick={()=>{setConfirmed([...confirmed,x.id]);notify("Interview attendance confirmed; Admin/HR notified")}}><Check size={14}/> Confirm</button>}<button className="open-candidate" onClick={()=>setSelected(x)}>Open <ChevronRight size={14}/></button></div></article>)}</section>
-  {selected&&<div className="modal-backdrop" onClick={()=>setSelected(null)}><div className="interview-info-modal card" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><h2>Interview information</h2><p>{selected.job}</p></div><button onClick={()=>setSelected(null)}><X/></button></div><div className="interview-info-hero"><CalendarDays/><div><b>{selected.interviewDate||"July 29, 2026"}</b><span>{selected.interviewTime||"10:30 AM"} · {selected.interviewMethod||"Google Meet"}</span></div></div><div className="interview-info-row"><Building2/><span><b>Interviewing office</b><small>{selected.office}</small></span></div><div className="interview-info-row"><Video/><span><b>Where / via</b><small>{selected.interviewLocation||"Meeting link will be shared before the interview."}</small></span></div><div className="interview-notes"><FileText/><div><b>Admin/HR notes</b><p>Please prepare a valid ID, portfolio, and examples of relevant experience. Join the meeting ten minutes early.</p></div></div>{role==="Applicant"&&!confirmed.includes(selected.id)&&<button className="primary full" onClick={()=>{setConfirmed([...confirmed,selected.id]);notify("Interview attendance confirmed");setSelected(null)}}><Check size={15}/> Confirm attendance</button>}</div></div>}
+  const confirm=(id:number)=>{setItems(current=>current.map(item=>item.id===id?{...item,interviewConfirmed:true}:item));notify("Interview attendance confirmed; Admin/HR notified")};
+  return <div className="page-content"><div className="page-heading"><div><div className="eyebrow"><CalendarDays size={14}/> Interview schedule</div><h1>Interviews</h1><p>{role==="Applicant"?"Review and confirm your scheduled interviews.":"View all confirmed and upcoming interviews."}</p></div></div><section className="interview-list">{scheduled.map(x=><article className="card interview-list-card" key={x.id}><div className="interview-date-tile"><b>{x.interviewDate?new Date(`${x.interviewDate}T00:00:00`).getDate():"29"}</b><span>{x.interviewDate?new Date(`${x.interviewDate}T00:00:00`).toLocaleString("en",{month:"short"}):"JUL"}</span></div><div><h3>{x.job}</h3><p>{x.name} · {x.office}</p><span><Clock3 size={13}/>{x.interviewTime||"10:30"} · {x.interviewMethod||"Google Meet"}</span></div><span className={`status ${x.interviewConfirmed?"reviewed":"interview-scheduled"}`}>{x.interviewConfirmed?"Confirmed":"Awaiting confirmation"}</span><div className="interview-card-actions">{role==="Applicant"&&!x.interviewConfirmed&&<button className="confirm-interview" onClick={()=>confirm(x.id)}><Check size={14}/> Confirm</button>}<button className="open-candidate" onClick={()=>setSelected(x)}>Open <ChevronRight size={14}/></button></div></article>)}</section>
+  {selected&&<div className="modal-backdrop" onClick={()=>setSelected(null)}><div className="interview-info-modal card" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><h2>Interview information</h2><p>{selected.job}</p></div><button onClick={()=>setSelected(null)}><X/></button></div><div className="interview-info-hero"><CalendarDays/><div><b>{selected.interviewDate||"July 29, 2026"}</b><span>{selected.interviewTime||"10:30 AM"} · {selected.interviewMethod||"Google Meet"}</span></div></div><div className="interview-info-row"><Building2/><span><b>Interviewing office</b><small>{selected.office}</small></span></div><div className="interview-info-row"><Video/><span><b>Where / via</b><small>{selected.interviewLocation||"Meeting link will be shared before the interview."}</small></span></div><div className="interview-notes"><FileText/><div><b>Admin/HR notes</b><p>Please prepare a valid ID, portfolio, and examples of relevant experience. Join the meeting ten minutes early.</p></div></div>{role==="Applicant"&&!selected.interviewConfirmed&&<button className="primary full" onClick={()=>{confirm(selected.id);setSelected(null)}}><Check size={15}/> Confirm attendance</button>}</div></div>}
   </div>;
 }
 
-function FunctionalPage({ page, role, notify,messages,setMessages,user,submitted,setSubmitted,priorityNames }: { page:string; role:Role; notify:(s:string)=>void;messages:SharedMessage[];setMessages:React.Dispatch<React.SetStateAction<SharedMessage[]>>;user:User;submitted:SubmittedApplication[];setSubmitted:React.Dispatch<React.SetStateAction<SubmittedApplication[]>>;priorityNames:string[] }) {
+function FunctionalPage({ page, role, notify,messages,setMessages,user,submitted,setSubmitted,priorityNames,jobRecords }: { page:string; role:Role; notify:(s:string)=>void;messages:SharedMessage[];setMessages:React.Dispatch<React.SetStateAction<SharedMessage[]>>;user:User;submitted:SubmittedApplication[];setSubmitted:React.Dispatch<React.SetStateAction<SubmittedApplication[]>>;priorityNames:string[];jobRecords:JobRecord[] }) {
   if(page==="Messages") return <MessagesPage role={role} messages={messages} setMessages={setMessages} user={user} applicants={submitted}/>;
-  if(page==="My applications"||page==="Applications")return <ApplicationManagement role={role} items={submitted} setItems={setSubmitted} notify={notify} user={user}/>;
-  if(page==="Candidates")return <CandidatesPage items={submitted} notify={notify} priorityNames={priorityNames}/>;
-  if(page==="Interviews")return <InterviewsPage role={role} items={submitted} notify={notify} user={user}/>;
+  if(page==="My applications"||page==="Applications")return <ApplicationManagement role={role} items={submitted} setItems={setSubmitted} notify={notify} user={user} jobs={jobRecords}/>;
+  if(page==="Candidates")return <CandidatesPage items={submitted} notify={notify} priorityNames={priorityNames} jobs={jobRecords}/>;
+  if(page==="Interviews")return <InterviewsPage role={role} items={submitted} setItems={setSubmitted} notify={notify} user={user}/>;
   const [query,setQuery]=useState(""); const [modal,setModal]=useState(false);
   const [rows,setRows]=useState(role==="Administrator"?["Information Technology","Academic Office","Human Resources","Accounting Office"]:role==="Office"?candidates.map(x=>x.name):jobs.map(x=>x.role));
   const copy=pageCopy[page]||[page,"Manage recruitment information and activity."];
@@ -665,14 +741,41 @@ export default function Home() {
   const [priorityNames,setPriorityNames]=useState<string[]>([]);
   const [registeredApplicants,setRegisteredApplicants]=useState<User[]>([]);
   const [submitted,setSubmitted]=useState<SubmittedApplication[]>([]);
+  const [applicationsReady,setApplicationsReady]=useState(false);
   const [messages,setMessages]=useState<SharedMessage[]>([]);
+  const [messagesReady,setMessagesReady]=useState(false);
+  const [readMessageIds,setReadMessageIds]=useState<number[]>([]);
+  const [readNotificationIds,setReadNotificationIds]=useState<string[]>([]);
   useEffect(()=>{
     const savedApplicants=JSON.parse(localStorage.getItem("careerbridge_applicants")||"[]") as User[];setRegisteredApplicants(savedApplicants);
     try{const savedJobs=JSON.parse(localStorage.getItem("careerbridge_job_records")||"[]") as JobRecord[];if(Array.isArray(savedJobs))setJobRecords(savedJobs)}catch{}
+    try{const savedMessages=JSON.parse(localStorage.getItem("careerbridge_messages")||"[]") as SharedMessage[];if(Array.isArray(savedMessages))setMessages(savedMessages)}catch{}
+    setMessagesReady(true);
+    loadStoredApplications().then(items=>setSubmitted(items)).finally(()=>setApplicationsReady(true));
     setRecordsReady(true);
     fetch("/api/auth/session").then(r=>r.ok?r.json():null).then(d=>{if(d?.user){const u=d.user.role==="Office"?{...d.user,role:"Administrator" as Role}:d.user;setUser(u);setRole(u.role)}else{const saved=localStorage.getItem("careerbridge_signup_user");if(saved){const u=JSON.parse(saved) as User;setUser(u);setRole(u.role)}}}).finally(()=>setChecking(false))
   },[]);
   useEffect(()=>{if(recordsReady)localStorage.setItem("careerbridge_job_records",JSON.stringify(jobRecords))},[jobRecords,recordsReady]);
+  useEffect(()=>{if(applicationsReady)void saveStoredApplications(submitted)},[submitted,applicationsReady]);
+  useEffect(()=>{if(messagesReady)try{localStorage.setItem("careerbridge_messages",JSON.stringify(messages))}catch{}},[messages,messagesReady]);
+  useEffect(()=>{
+    if(!user)return;
+    const accountKey=user.email.toLowerCase();
+    try{
+      setReadMessageIds(JSON.parse(localStorage.getItem(`careerbridge_read_messages_${accountKey}`)||"[]"));
+      setReadNotificationIds(JSON.parse(localStorage.getItem(`careerbridge_read_notifications_${accountKey}`)||"[]"));
+    }catch{setReadMessageIds([]);setReadNotificationIds([])}
+  },[user?.email]);
+  useEffect(()=>{
+    if(!user||page!=="Messages")return;
+    const incoming=messages.filter(message=>message.to===role&&(role!=="Applicant"||message.applicantEmail===user.email)).map(message=>message.id);
+    if(!incoming.length)return;
+    setReadMessageIds(current=>{
+      const next=[...new Set([...current,...incoming])];
+      try{localStorage.setItem(`careerbridge_read_messages_${user.email.toLowerCase()}`,JSON.stringify(next))}catch{}
+      return next;
+    });
+  },[page,messages,role,user]);
   const notify=(s:string)=>{setToast(s);setTimeout(()=>setToast(""),2600)};
   const logout=async()=>{try{await fetch("/api/auth/logout",{method:"POST"})}finally{localStorage.removeItem("careerbridge_signup_user");setUser(null);setShowLogin(true);setPage("Overview")}};
   const content = useMemo(() => {
@@ -682,11 +785,11 @@ export default function Home() {
     if(page==="Job postings"||page==="Find jobs") return <JobPostingsPage role={role} notify={notify} records={jobRecords} setRecords={setJobRecords} setSubmitted={setSubmitted} user={user!}/>;
     if(role==="Administrator"&&page==="AI insights") return <LiveAIInsightsPage items={submitted} notify={notify} priorityNames={priorityNames} setPriorityNames={setPriorityNames}/>;
     if(role==="Administrator"&&page==="Workflows") return <WorkflowPage notify={notify}/>;
-    if(page!=="Overview") return <FunctionalPage page={page} role={role} notify={notify} messages={messages} setMessages={setMessages} user={user!} submitted={submitted} setSubmitted={setSubmitted} priorityNames={priorityNames}/>;
+    if(page!=="Overview") return <FunctionalPage page={page} role={role} notify={notify} messages={messages} setMessages={setMessages} user={user!} submitted={submitted} setSubmitted={setSubmitted} priorityNames={priorityNames} jobRecords={jobRecords}/>;
     if (role === "Office") return <OfficeHome/>;
     if (role === "Administrator") return <AdminLiveHome jobs={jobRecords} applications={submitted} applicants={registeredApplicants} setPage={setPage}/>;
-    return <NewApplicantHome user={user!} setPage={setPage} jobs={jobRecords}/>;
-  }, [role,page,jobRecords,submitted,messages,priorityNames,user,registeredApplicants]);
+    return <NewApplicantHome user={user!} setPage={setPage} jobs={jobRecords} items={submitted} messages={messages} readMessageIds={readMessageIds}/>;
+  }, [role,page,jobRecords,submitted,messages,priorityNames,user,registeredApplicants,readMessageIds]);
   const switchRole = (r: Role) => { setRole(r==="Office"?"Administrator":r); setPage("Overview"); };
   if(checking)return <div className="loading-screen"><Brand/><span>Loading secure portal…</span></div>;
   if(!user&&!showLogin)return <LandingPage onLogin={()=>setShowLogin(true)}/>;
@@ -700,9 +803,20 @@ export default function Home() {
       }catch{}
     }
   }}/>;
-  const messageCount=messages.filter(m=>m.to===role&&(role!=="Applicant"||m.applicantEmail===user.email)).length;
-  return <div className="app-shell" onClick={e=>{const b=(e.target as HTMLElement).closest("button");if(b&&!b.onclick&&!b.closest("form")&&!b.classList.contains("dots"))notify("Action completed")}}>
-    <Sidebar role={role} page={page} setPage={setPage} open={menu} close={()=>setMenu(false)} onLogout={logout} user={user} messageCount={messageCount}/><main><Header role={role} setRole={switchRole} onMenu={()=>setMenu(true)} setPage={setPage} notify={notify} user={user} messageCount={messageCount}/>{content}</main>
+  const messageCount=messages.filter(m=>m.to===role&&(role!=="Applicant"||m.applicantEmail===user.email)&&!readMessageIds.includes(m.id)).length;
+  const notificationItems=role==="Applicant"
+    ?submitted.filter(item=>item.email.toLowerCase()===user.email.toLowerCase()&&(item.reviewed||item.status==="Reviewed"||item.status==="Interview scheduled")).map(item=>item.status==="Interview scheduled"
+      ?{id:`interview-${item.id}`,title:"Interview scheduled",detail:`${item.job} · ${item.interviewDate||"Date available"} ${item.interviewTime||""}`.trim(),page:"Interviews"}
+      :{id:`review-${item.id}`,title:"Application reviewed",detail:`Admin/HR reviewed your ${item.job} application.`,page:"My applications"})
+    :[...new Map(submitted.map(item=>[item.email.toLowerCase(),item])).values()].map(item=>({id:`applicant-${item.email}`,title:"New applicant",detail:`${item.name} applied for ${item.job}.`,page:"Applications"}));
+  const unreadNotificationCount=notificationItems.filter(item=>!readNotificationIds.includes(item.id)).length;
+  const markNotificationsRead=()=>{
+    const next=[...new Set([...readNotificationIds,...notificationItems.map(item=>item.id)])];
+    setReadNotificationIds(next);
+    try{localStorage.setItem(`careerbridge_read_notifications_${user.email.toLowerCase()}`,JSON.stringify(next))}catch{}
+  };
+  return <TooltipProvider><SidebarProvider defaultOpen style={{"--sidebar-width":"16rem","--sidebar-width-icon":"3.5rem"} as React.CSSProperties}><div className="app-shell shadcn-shell" onClick={e=>{const b=(e.target as HTMLElement).closest("button");if(b&&!b.onclick&&!b.closest("form")&&!b.classList.contains("dots"))notify("Action completed")}}>
+    <Sidebar role={role} page={page} setPage={setPage} open={menu} close={()=>setMenu(false)} onLogout={logout} user={user} messageCount={messageCount}/><SidebarInset className="career-main"><Header role={role} setRole={switchRole} onMenu={()=>setMenu(true)} setPage={setPage} notify={notify} user={user} messageCount={messageCount} notifications={notificationItems} notificationCount={unreadNotificationCount} onNotificationsRead={markNotificationsRead}/>{content}</SidebarInset>
     {toast&&<div className="toast"><CheckCircle2 size={17}/>{toast}</div>}
-  </div>;
+  </div></SidebarProvider></TooltipProvider>;
 }
