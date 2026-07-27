@@ -28,7 +28,55 @@ function cleanExtractedText(value: string) {
     .trim();
 }
 
-async function extractScannedPdfText(buffer: Buffer) {
+const MATCH_STOP_WORDS = new Set([
+  "and", "the", "with", "for", "from", "that", "this", "your", "you", "are",
+  "job", "office", "description", "requirements", "required", "preferred",
+  "school", "work", "role", "years", "experience", "skills", "candidate",
+]);
+
+function meaningfulWords(value: string) {
+  return Array.from(new Set(
+    value.toLowerCase()
+      .replace(/[^a-z0-9+#.]+/g, " ")
+      .split(/\s+/)
+      .filter(word => word.length > 2 && !MATCH_STOP_WORDS.has(word)),
+  ));
+}
+
+function fallbackAnalysis(resumeText: string, jobDescription: string) {
+  const resumeWords = new Set(meaningfulWords(resumeText));
+  const sections = jobDescription.split(/(?=^JOB:\s*)/gmi).filter(section => /^JOB:/i.test(section.trim()));
+  const jobMatches = sections.map(section => {
+    const title = section.match(/^JOB:\s*(.+)$/mi)?.[1]?.trim() || "Available position";
+    const requirementText = section.match(/REQUIREMENTS:\s*([\s\S]*)/i)?.[1] || section;
+    const requirementWords = meaningfulWords(requirementText);
+    const matchedSkills = requirementWords.filter(word => resumeWords.has(word));
+    const missingSkills = requirementWords.filter(word => !resumeWords.has(word));
+    const evidenceRatio = requirementWords.length ? matchedSkills.length / requirementWords.length : 0;
+    const titleWords = meaningfulWords(title);
+    const titleRatio = titleWords.length ? titleWords.filter(word => resumeWords.has(word)).length / titleWords.length : 0;
+    const skillScore = Math.round(Math.min(100, evidenceRatio * 100));
+    const qualificationScore = Math.round(Math.min(100, (evidenceRatio * .7 + titleRatio * .3) * 100));
+    const score = Math.round(skillScore * .6 + qualificationScore * .4);
+    return { title, score, skillScore, qualificationScore, matchedSkills, missingSkills };
+  }).sort((a, b) => b.score - a.score);
+  const skills = jobMatches.flatMap(match => match.matchedSkills).filter((skill, index, all) => all.indexOf(skill) === index);
+  return {
+    summary: "Resume text was extracted successfully. CareerBridge used evidence-based matching while the live AI service was unavailable.",
+    skills,
+    education: [],
+    experience: [],
+    qualifications: skills,
+    missingSkills: jobMatches[0]?.missingSkills || [],
+    interviewSuggestions: ["Ask the applicant to describe practical examples of the matched qualifications."],
+    matchScore: jobMatches[0]?.score || 0,
+    recommendedOffice: "",
+    jobMatches,
+    analysisMode: "fallback",
+  };
+}
+
+async function renderScannedPdfPages(buffer: Buffer) {
   const canvas = await import("@napi-rs/canvas");
   // pdf.js expects these browser drawing primitives even when it renders in Node.
   Object.assign(globalThis, {
@@ -40,31 +88,65 @@ async function extractScannedPdfText(buffer: Buffer) {
   // because Vercel does not expose node_modules through a browser-compatible URL.
   await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const { createWorker } = await import("tesseract.js");
   const pdf = await pdfjs.getDocument({
     data: new Uint8Array(buffer),
     useSystemFonts: true,
   }).promise;
   const pages: string[] = [];
-  const worker = await createWorker("eng", 1, { logger: () => undefined });
-  // Resumes are normally short. This ceiling prevents one upload monopolizing the server.
-  const pageCount = Math.min(pdf.numPages, 8);
+  // Groq vision accepts up to five images. Three resume pages keep the request
+  // quick enough for Vercel while covering the normal resume length.
+  const pageCount = Math.min(pdf.numPages, 3);
   try {
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 2 });
+      const viewport = page.getViewport({ scale: 1 });
       const image = canvas.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const context = image.getContext("2d");
       await page.render({ canvasContext: context as never, viewport }).promise;
-      const result = await worker.recognize(image.toBuffer("image/png"));
-      if (result.data.text.trim()) pages.push(result.data.text);
+      pages.push(image.toDataURL("image/jpeg", 0.72));
       page.cleanup();
     }
-  } finally {
-    await worker.terminate();
-  }
+  } finally {}
   await pdf.destroy();
-  return pages.join("\n\n");
+  return pages;
+}
+
+async function analyzeScannedResume(images: string[], jobDescription: string, key: string) {
+  const controller = new AbortController();
+  // Rendering has already replaced the CPU-heavy OCR step. Give the vision
+  // request enough time to read the page while remaining below the route limit.
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "qwen/qwen3.6-27b",
+        reasoning_effort: "none",
+        temperature: 0.7,
+        top_p: 0.8,
+        max_completion_tokens: 2048,
+        response_format: { type: "json_object" },
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: `Read this scanned resume and compare it independently with every supplied job. Return strict JSON with extractedText, summary, skills[], education[], experience[], qualifications[], missingSkills[], interviewSuggestions[], matchScore (0-100), recommendedOffice, and jobMatches[] sorted highest-first. Every job match must contain the exact supplied title, score, skillScore, qualificationScore, matchedSkills[], and missingSkills[]. Use only visible resume evidence.\n\nJOBS:\n${jobDescription.slice(0, 12000)}` },
+            ...images.map(image => ({ type: "image_url", image_url: { url: image } })),
+          ],
+        }],
+      }),
+    });
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 500);
+      throw new Error(`Groq vision returned ${response.status}: ${detail}`);
+    }
+    const data = await response.json();
+    const raw = String(data.choices?.[0]?.message?.content || "").trim();
+    return JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")) as Record<string, unknown>;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function POST(request: Request) {
@@ -100,7 +182,10 @@ export async function POST(request: Request) {
     if (isDocx && !hasZipSignature) {
       return NextResponse.json({ error: "The selected file has a .docx name but is not a readable Word document. Save it as DOCX again, then re-upload it." }, { status: 415 });
     }
+    const key = process.env.GROQ_API_KEY;
+    if (!key) return NextResponse.json({ error: "AI service is not configured." }, { status: 503 });
     let resumeText = "";
+    let visionParsed: Record<string, unknown> | null = null;
     if (isPdf) {
       const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
       try {
@@ -110,11 +195,13 @@ export async function POST(request: Request) {
       }
       if (resumeText.replace(/\s/g, "").length < 40) {
         try {
-          resumeText = await extractScannedPdfText(buffer);
+          const images = await renderScannedPdfPages(buffer);
+          visionParsed = await analyzeScannedResume(images, jobDescription, key);
+          resumeText = cleanExtractedText(String(visionParsed.extractedText || ""));
         } catch (error) {
-          console.error("PDF OCR fallback failed:", error);
+          console.error("Scanned PDF vision analysis failed:", error);
           return NextResponse.json({
-            error: "This PDF could not be read. If it is password-protected, unlock it first; otherwise export it as a standard PDF or DOCX and try again.",
+            error: "This scanned PDF could not be analyzed quickly enough. Export it as a searchable PDF or DOCX and try again.",
           }, { status: 422 });
         }
       }
@@ -135,24 +222,36 @@ export async function POST(request: Request) {
         error: "The resume could not be read after text extraction and OCR. Please upload a clearer PDF or a DOCX file.",
       }, { status: 422 });
     }
-    const key = process.env.GROQ_API_KEY;
-    if (!key) return NextResponse.json({ error: "AI service is not configured." }, { status: 503 });
-    const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", temperature: 0.15,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: "Parse resumes for school recruitment. Compare the resume independently against every JOB supplied. Return strict JSON containing summary, skills[], education[], experience[], qualifications[], missingSkills[], interviewSuggestions[], matchScore integer 0-100, recommendedOffice, and jobMatches[] sorted highest-first where each match has the exact supplied title, score integer 0-100, skillScore integer 0-100, qualificationScore integer 0-100, matchedSkills[], and missingSkills[]. Base scores only on resume evidence and job requirements. Never infer protected traits." },
-          { role: "user", content: `RESUME TEXT:\n${resumeText.slice(0,30000)}\n\nTARGET JOB:\n${jobDescription}` }
-        ]
-      })
-    });
-    if (!ai.ok) return NextResponse.json({ error: "Groq analysis failed." }, { status: 502 });
-    const data = await ai.json();
-    const rawContent = String(data.choices?.[0]?.message?.content || "").trim();
-    const parsed = JSON.parse(rawContent.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
+    const controller = new AbortController();
+    const aiDeadline = setTimeout(() => controller.abort(), 8_000);
+    let parsed: Record<string, unknown>;
+    if (visionParsed) {
+      parsed = visionParsed;
+      clearTimeout(aiDeadline);
+    } else try {
+      const ai = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        signal: controller.signal,
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile", temperature: 0.15,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: "Parse resumes for school recruitment. Compare the resume independently against every JOB supplied. Return strict JSON containing summary, skills[], education[], experience[], qualifications[], missingSkills[], interviewSuggestions[], matchScore integer 0-100, recommendedOffice, and jobMatches[] sorted highest-first where each match has the exact supplied title, score integer 0-100, skillScore integer 0-100, qualificationScore integer 0-100, matchedSkills[], and missingSkills[]. Base scores only on resume evidence and job requirements. Never infer protected traits." },
+            { role: "user", content: `RESUME TEXT:\n${resumeText.slice(0,18000)}\n\nTARGET JOB:\n${jobDescription.slice(0,12000)}` }
+          ]
+        })
+      });
+      if (!ai.ok) throw new Error(`Groq returned ${ai.status}`);
+      const data = await ai.json();
+      const rawContent = String(data.choices?.[0]?.message?.content || "").trim();
+      parsed = JSON.parse(rawContent.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
+    } catch (error) {
+      console.warn("Using deterministic resume matching fallback:", error);
+      parsed = fallbackAnalysis(resumeText, jobDescription);
+    } finally {
+      clearTimeout(aiDeadline);
+    }
     const strings = (value: unknown): string[] => Array.isArray(value)
       ? value.map(item => typeof item === "string" ? item : item && typeof item === "object"
         ? Object.values(item as Record<string, unknown>).filter(Boolean).join(" — ")
