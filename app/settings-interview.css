@@ -1,0 +1,18 @@
+.interview-time-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.15fr;
+  gap: 9px;
+  margin: 0 0 14px;
+}
+
+.interview-time-fields select {
+  margin-top: 0;
+  font-weight: 700;
+  text-align: center;
+}
+
+@media (max-width: 520px) {
+  .interview-time-fields {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}

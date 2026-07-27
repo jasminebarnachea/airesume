@@ -440,9 +440,37 @@ function ApplicantDirectory({accounts,applications}:{accounts:User[];application
 }
 
 function SettingsPage({user,setUser,notify}:{user:User;setUser:React.Dispatch<React.SetStateAction<User|null>>;notify:(text:string)=>void}) {
-  const [draft,setDraft]=useState(user); const [emailUpdates,setEmailUpdates]=useState(true); const [applicationUpdates,setApplicationUpdates]=useState(true);
+  const [draft,setDraft]=useState(user);
   useEffect(()=>setDraft(user),[user]);
-  return <div className="page-content"><div className="page-heading"><div><div className="eyebrow"><Settings size={14}/> Account preferences</div><h1>Settings</h1><p>Manage the information connected to this signed-in account.</p></div></div><form className="card panel settings-form" onSubmit={event=>{event.preventDefault();const clean={...draft,name:draft.name.trim(),email:draft.email.trim().toLowerCase()};setUser(clean);if(clean.role==="Applicant"){localStorage.setItem("careerbridge_signup_user",JSON.stringify(clean));const existing=JSON.parse(localStorage.getItem("careerbridge_applicants")||"[]") as User[];const withoutOld=existing.filter(item=>item.email.toLowerCase()!==user.email.toLowerCase());localStorage.setItem("careerbridge_applicants",JSON.stringify([...withoutOld,clean]));localStorage.setItem(`careerbridge_preferences_${clean.email}`,JSON.stringify({applicationUpdates,emailUpdates}))}notify("Settings saved successfully")}}><div className="panel-title"><div><h2>Profile information</h2><p>Used on your account and applicant conversations.</p></div>{user.role==="Applicant"&&<div className="avatar settings-avatar">{draft.avatar?<img src={draft.avatar} alt={draft.name}/>:draft.name.split(" ").map(part=>part[0]).join("").slice(0,2)}</div>}</div><div className="form-two"><label>Full name<input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} required/></label><label>Email address<input type="email" value={draft.email} onChange={e=>setDraft({...draft,email:e.target.value})} required/></label></div>{user.role==="Applicant"&&<label>Profile image<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>{const file=e.target.files?.[0];if(file){if(file.size>2*1024*1024){notify("Profile image must be 2 MB or smaller.");e.target.value="";return}const reader=new FileReader();reader.onload=()=>setDraft(current=>({...current,avatar:String(reader.result)}));reader.readAsDataURL(file)}}}/><small>PNG, JPG, or WebP · Maximum 2 MB</small></label>}<div className="settings-toggles"><label><input type="checkbox" checked={applicationUpdates} onChange={e=>setApplicationUpdates(e.target.checked)}/><span><b>Application updates</b><small>Receive status and interview notifications.</small></span></label><label><input type="checkbox" checked={emailUpdates} onChange={e=>setEmailUpdates(e.target.checked)}/><span><b>Email notifications</b><small>Receive important recruitment messages by email.</small></span></label></div><div className="modal-actions"><button type="button" className="secondary" onClick={()=>setDraft(user)}>Discard changes</button><button className="primary"><Check size={15}/> Save settings</button></div></form></div>
+  const save=(event:FormEvent<HTMLFormElement>)=>{
+    event.preventDefault();
+    const clean={...draft,name:draft.name.trim(),email:draft.email.trim().toLowerCase()};
+    setUser(clean);
+    if(clean.role==="Applicant"){
+      localStorage.setItem("careerbridge_signup_user",JSON.stringify(clean));
+      const existing=JSON.parse(localStorage.getItem("careerbridge_applicants")||"[]") as User[];
+      const withoutOld=existing.filter(item=>item.email.toLowerCase()!==user.email.toLowerCase());
+      localStorage.setItem("careerbridge_applicants",JSON.stringify([...withoutOld,clean]));
+    }
+    notify("Profile saved successfully");
+  };
+  const imageField=<label>Profile icon<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    if(file.size>2*1024*1024){notify("Profile image must be 2 MB or smaller.");e.target.value="";return}
+    const reader=new FileReader();
+    reader.onload=()=>setDraft(current=>({...current,avatar:String(reader.result)}));
+    reader.readAsDataURL(file);
+  }}/><small>PNG, JPG, or WebP · Maximum 2 MB</small></label>;
+  return <div className="page-content">
+    <div className="page-heading"><div><div className="eyebrow"><Settings size={14}/> Profile</div><h1>Settings</h1><p>Manage the name and icon shown on your account.</p></div></div>
+    <form className="card panel settings-form" onSubmit={save}>
+      <div className="panel-title"><div><h2>Profile information</h2><p>Your name and profile icon appear in messages and applications.</p></div><div className="avatar settings-avatar">{draft.avatar?<img src={draft.avatar} alt={draft.name}/>:draft.name.split(" ").map(part=>part[0]).join("").slice(0,2)}</div></div>
+      <label>Full name<input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} required/></label>
+      {imageField}
+      <div className="modal-actions"><button type="button" className="secondary" onClick={()=>setDraft(user)}>Discard changes</button><button className="primary"><Check size={15}/> Save profile</button></div>
+    </form>
+  </div>
 }
 
 function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
@@ -677,7 +705,30 @@ function ApplicationManagement({role,items,setItems,notify,user,jobs}:{role:Role
   const jobNames=role==="Applicant"?[...new Set(baseVisible.map(x=>x.job))]:[...new Set([...jobs.map(job=>job.title),...baseVisible.map(x=>x.job)])];
   return <div className="page-content"><div className="page-heading"><div>{jobFolder&&<button className="folder-back" onClick={()=>setJobFolder(null)}><ArrowLeft size={15}/> All application envelopes</button>}<div className="eyebrow"><FileText size={14}/> Application workflow</div><h1>{role==="Applicant"?"My applications":jobFolder||"Applications by job"}</h1><p>{role==="Applicant"?"Track reviews, interviews, and hiring updates.":jobFolder?`Review applications submitted for ${jobFolder}.`:"Point at an envelope to preview it, then open the job’s applications."}</p></div></div>{role!=="Applicant"&&!jobFolder?<>{jobNames.length?<div className="job-envelope-grid">{jobNames.map((job,i)=>{const group=baseVisible.filter(x=>x.job===job);const record=jobs.find(item=>item.title===job);return <JobEnvelope key={job} title={job} office={group[0]?.office||record?.office} count={group.length} score={group.length?Math.max(...group.map(x=>x.score)):0} label="Applications" index={i} onOpen={()=>setJobFolder(job)}/>})}</div>:<section className="card panel empty-ai-state"><FileText/><h2>No job postings yet</h2><p>Create a job posting to generate its application envelope automatically.</p></section>}</>:<section className="card panel managed-apps">{visible.map(a=><div className="managed-row" key={a.id}><div className="avatar">{a.applicantAvatar?<img src={a.applicantAvatar} alt={a.name}/>:<UserRound size={17}/>}</div><div><b>{a.name}</b><span>{a.job} · {a.office}</span>{a.interviewDate&&<small className="interview-detail"><CalendarDays size={11}/>{a.interviewDate} at {a.interviewTime} · {a.interviewMethod}</small>}</div><span className={`status ${a.status.toLowerCase().replaceAll(" ","-")}`}>{a.status}</span><b className="managed-score">{a.score}% match</b>{role!=="Applicant"&&<div className="review-actions"><button className={a.reviewed?"completed":""} onClick={()=>setReviewing(a)}>{a.reviewed?<Check size={14}/>:<FileSearch size={14}/>} {a.reviewed?"Reviewed":"Review resume"}</button><button className={a.status==="Interview scheduled"?"scheduled":""} onClick={()=>setScheduling(a)}><CalendarDays size={14}/> {a.status==="Interview scheduled"?"Reschedule":"Schedule interview"}</button></div>}</div>)}{!visible.length&&<div className="empty-jobs"><FileText/><h3>No applications yet</h3><p>This job envelope is ready and will update after an applicant is matched.</p></div>}</section>}
   {reviewing&&<div className="modal-backdrop" onClick={()=>setReviewing(null)}><div className="review-modal card actual-file-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><h2>Resume review</h2><p>{reviewing.name} · {reviewing.job}</p></div><button onClick={()=>setReviewing(null)}><X/></button></div><div className="actual-file-grid"><ResumeDocument application={reviewing}/><aside className="candidate-analysis"><div className="analysis-score"><ScoreRing score={reviewing.score}/><div><b>AI match score</b><span>{reviewing.skillScore??reviewing.score}% skills alignment</span></div></div><h3>AI scorer</h3><p>{reviewing.summary||"Analysis is unavailable for this demonstration record."}</p>{reviewing.skills?.length?<div className="parsed-skills">{reviewing.skills.map(skill=><span key={skill}>{skill}</span>)}</div>:null}{[["Skills",reviewing.skillScore??reviewing.score],["Qualifications",reviewing.qualificationScore??reviewing.score]].map(([label,value])=><div className="analysis-factor" key={label}><span>{label}<b>{value}%</b></span><div><i style={{width:`${Number(value)}%`}}/></div></div>)}</aside></div><div className="modal-actions"><button className={`review-confirm ${reviewing.reviewed?"done":""}`} onClick={()=>{const next=!reviewing.reviewed;setItems(items.map(x=>x.id===reviewing.id?{...x,reviewed:next,status:x.status==="Interview scheduled"?x.status:next?"Reviewed":"Under review"}:x));notify(`${reviewing.name} marked as ${next?"reviewed":"unreviewed"}; applicant notified`);setReviewing(null)}}>{reviewing.reviewed?<><X size={15}/>Unreview</>:<><CheckCircle2 size={15}/>Mark as reviewed</>}</button></div></div></div>}
-  {scheduling&&<div className="modal-backdrop" onClick={()=>setScheduling(null)}><form className="modal interview-modal card" onClick={e=>e.stopPropagation()} onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);setItems(items.map(x=>x.id===scheduling.id?{...x,status:"Interview scheduled",interviewDate:String(f.get("date")),interviewTime:String(f.get("time")),interviewMethod:String(f.get("method")),interviewLocation:String(f.get("location")),interviewConfirmed:false}:x));notify(`Interview scheduled for ${scheduling.name}; applicant notified`);setScheduling(null)}}><div className="modal-head"><div><h2>Schedule interview</h2><p>{scheduling.name} · {scheduling.job}</p></div><button type="button" onClick={()=>setScheduling(null)}><X/></button></div><div className="calendar-banner"><CalendarDays/><div><b>Choose the interview schedule</b><span>The applicant will receive these details immediately.</span></div></div><div className="form-two"><label>Interview date<input name="date" type="date" required defaultValue={scheduling.interviewDate}/></label><label>Start time<input name="time" type="time" required defaultValue={scheduling.interviewTime}/></label></div><label>Interview method<select name="method" required defaultValue={scheduling.interviewMethod||"Google Meet"}><option>Google Meet</option><option>Zoom</option><option>Onsite</option></select></label><label>Meeting link or onsite location<input name="location" required defaultValue={scheduling.interviewLocation} placeholder="Meeting URL, room, or campus address"/></label><label>Interview notes<textarea name="notes" placeholder="Preparation instructions or required documents"/></label><div className="modal-actions"><button type="button" className="secondary" onClick={()=>setScheduling(null)}>Cancel</button><button className="primary"><CalendarDays size={15}/> Confirm schedule</button></div></form></div>}
+  {scheduling&&<div className="modal-backdrop" onClick={()=>setScheduling(null)}>
+    <form className="modal interview-modal card" onClick={e=>e.stopPropagation()} onSubmit={e=>{
+      e.preventDefault();
+      const f=new FormData(e.currentTarget);
+      const time=`${String(f.get("hour")).padStart(2,"0")}:${String(f.get("minute")).padStart(2,"0")} ${String(f.get("period"))}`;
+      setItems(items.map(x=>x.id===scheduling.id?{...x,status:"Interview scheduled",interviewDate:String(f.get("date")),interviewTime:time,interviewMethod:String(f.get("method")),interviewLocation:String(f.get("location")),interviewConfirmed:false}:x));
+      notify(`Interview scheduled for ${scheduling.name}; applicant notified`);
+      setScheduling(null);
+    }}>
+      <div className="modal-head"><div><h2>Schedule interview</h2><p>{scheduling.name} · {scheduling.job}</p></div><button type="button" onClick={()=>setScheduling(null)}><X/></button></div>
+      <div className="calendar-banner"><CalendarDays/><div><b>Choose the interview schedule</b><span>The applicant will receive these details immediately.</span></div></div>
+      <label>Interview date<input name="date" type="date" required defaultValue={scheduling.interviewDate}/></label>
+      <label>Start time</label>
+      <div className="form-three interview-time-fields">
+        <select name="hour" required defaultValue={scheduling.interviewTime?.match(/^(\d{1,2})/)?.[1]||"9"}>{Array.from({length:12},(_,index)=><option key={index+1} value={index+1}>{index+1}</option>)}</select>
+        <select name="minute" required defaultValue={scheduling.interviewTime?.match(/:(\d{2})/)?.[1]||"00"}>{["00","15","30","45"].map(minute=><option key={minute}>{minute}</option>)}</select>
+        <select name="period" required defaultValue={scheduling.interviewTime?.match(/\b(AM|PM)\b/i)?.[1]?.toUpperCase()||"AM"}><option>AM</option><option>PM</option></select>
+      </div>
+      <label>Interview method<select name="method" required defaultValue={scheduling.interviewMethod||"Google Meet"}><option>Google Meet</option><option>Zoom</option><option>Onsite</option></select></label>
+      <label>Meeting link or onsite location<input name="location" required defaultValue={scheduling.interviewLocation} placeholder="Meeting URL, room, or campus address"/></label>
+      <label>Interview notes<textarea name="notes" placeholder="Preparation instructions or required documents"/></label>
+      <div className="modal-actions"><button type="button" className="secondary" onClick={()=>setScheduling(null)}>Cancel</button><button className="primary"><CalendarDays size={15}/> Confirm schedule</button></div>
+    </form>
+  </div>}
   </div>
 }
 
